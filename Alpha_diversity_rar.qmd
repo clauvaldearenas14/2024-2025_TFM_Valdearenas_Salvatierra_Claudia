@@ -1,0 +1,201 @@
+---
+title: "Alpha diversity with RAR (Bacteria)"
+author: "Claudia Valdearenas"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r message=FALSE, warning=FALSE}
+#LOAD LIBRARIES
+library(vegan)
+library(ape)
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+library(car) # Per a ANOVA robusta
+library(emmeans) 
+library(forcats)
+library(rstatix)
+```
+
+```{r message=FALSE, warning=FALSE}
+#LOAD DATA
+
+load("cichlids_rarefaction1500_SILVA.rda")
+cichlids<-subset_taxa(cichlid_rar, Domain == "Bacteria")
+cichlids = subset_samples(cichlids, Sample_type == "Intestine")
+
+#TAXA
+ntaxa(cichlids)
+sum(taxa_sums(cichlids))
+```
+
+## 1. OBSERVED, CHAO1 AND SHANNON
+
+```{r}
+alpha_meas=c("Observed", "Chao1", "Shannon")
+
+#DIET
+
+sample_data(cichlids)$Diet <- fct_recode(sample_data(cichlids)$Diet,
+                                              "Herbivorous" = "Algae",
+                                              "Control-Omnivorous" = "Control-Omni",
+                                              "Carnivorous" = "Marine")
+
+
+(p <- plot_richness(cichlids, "Diet", measures = alpha_meas)) +
+  geom_boxplot(aes(fill = Diet), alpha = 0.5) +
+  scale_fill_manual(values = c(
+    "Herbivorous" = "lightgreen",
+    "Control-Omnivorous" = "lightblue",
+    "Carnivorous" = "lightcoral"
+  )) +
+  theme(
+  axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1),
+  axis.title.x = element_blank(),
+  plot.title = element_text(hjust = 0.5, face = "bold"),
+  plot.margin = margin(t = 10, r = 10, b = 30, l = 10)  # espacio inferior (bottom = 30)
+)
+
+```
+
+```{r}
+#Statistics
+
+alpha_div <- estimate_richness(cichlids, measures = alpha_meas)
+alpha_div$Diet <- sample_data(cichlids)$Diet
+
+    ##OBSERVED
+
+#Kruskal-Wallis
+
+kruskal.test(Observed ~ Diet, data = alpha_div)
+
+pairwise.wilcox.test(alpha_div$Observed, alpha_div$Diet, p.adjust.method = "BH")
+
+    ##CHAO 1
+
+kruskal.test(Chao1 ~ Diet, data = alpha_div)
+
+pairwise.wilcox.test(alpha_div$Chao1, alpha_div$Diet, p.adjust.method = "BH")
+
+    ##SHANNON
+
+kruskal.test(Shannon ~ Diet, data = alpha_div)
+
+```
+
+## Just Shannon
+
+```{r}
+## Shannon ##
+alpha_meas <- c("Shannon")
+alpha_div <- estimate_richness(cichlids, measures = alpha_meas)
+
+# Add the variable islet to the alpha diversity data 
+sample_data_df <- as.data.frame(sample_data(cichlids))
+alpha_div$Diet <- sample_data_df$Diet
+
+# Descriptive statistics
+alpha_stats <- alpha_div %>%
+  group_by(Diet) %>%
+  summarize(
+    mean_Shannon = mean(Shannon, na.rm = TRUE),
+    median_Shannon = median(Shannon, na.rm = TRUE),
+    sd_Shannon = sd(Shannon, na.rm = TRUE),
+    min_Shannon = min(Shannon, na.rm = TRUE),
+    max_Shannon = max(Shannon, na.rm = TRUE)
+  )
+
+print(alpha_stats)
+
+
+ggplot(alpha_div, aes(x = Diet, y = Shannon, fill = Diet)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  scale_fill_manual(values = c(
+    "Herbivore" = "forestgreen",
+    "Control omnivore" = "navy",
+    "Carnivore" = "brown3"
+  )) +
+  theme_minimal() +
+  labs(title = "Shannon Diversity per Diet", x = "Diet", y = "Shannon Index") +
+  theme(legend.position = "none")
+```
+
+## Just Observed
+
+```{r}
+## Observed ##
+alpha_meas <- c("Observed")
+alpha_div <- estimate_richness(cichlids, measures = alpha_meas)
+
+# Add the variable islet to the alpha diversity data 
+sample_data_df <- as.data.frame(sample_data(cichlids))
+alpha_div$Diet <- sample_data_df$Diet
+
+ggplot(alpha_div, aes(x = Diet, y = Observed, fill = Diet)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  scale_fill_manual(values = c(
+    "Herbivore" = "forestgreen",
+    "Control omnivore" = "navy",
+    "Carnivore" = "brown3"
+  )) +
+  theme_minimal() +
+  labs(title = "Observed Diversity per Diet", x = "Diet", y = "Observed") +
+  theme(legend.position = "none")
+
+
+alpha_div %>%
+  group_by(Diet) %>%
+  summarise(
+    n = n(),
+    mean = mean(Observed, na.rm = TRUE),
+    sd = sd(Observed, na.rm = TRUE),
+    median = median(Observed, na.rm = TRUE),
+    min = min(Observed, na.rm = TRUE),
+    max = max(Observed, na.rm = TRUE),
+    IQR = IQR(Observed, na.rm = TRUE)
+  )
+
+```
+
+## Just Chao1
+
+```{r}
+## Chao1 ##
+alpha_meas <- c("Chao1")
+alpha_div <- estimate_richness(cichlids, measures = alpha_meas)
+
+# Add the variable islet to the alpha diversity data 
+sample_data_df <- as.data.frame(sample_data(cichlids))
+alpha_div$Diet <- sample_data_df$Diet
+
+ggplot(alpha_div, aes(x = Diet, y = Chao1, fill = Diet)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  scale_fill_manual(values = c(
+    "Herbivore" = "forestgreen",
+    "Control omnivore" = "navy",
+    "Carnivore" = "brown3"
+  )) +
+  theme_minimal() +
+  labs(title = "Chao1 Index per Diet", x = "Diet", y = "Chao1") +
+  theme(legend.position = "none")
+
+alpha_div %>%
+  group_by(Diet) %>%
+  summarise(
+    n = n(),
+    mean = mean(Chao1, na.rm = TRUE),
+    sd = sd(Chao1, na.rm = TRUE),
+    median = median(Chao1, na.rm = TRUE),
+    min = min(Chao1, na.rm = TRUE),
+    max = max(Chao1, na.rm = TRUE),
+    IQR = IQR(Chao1, na.rm = TRUE)
+  )
+
+```
