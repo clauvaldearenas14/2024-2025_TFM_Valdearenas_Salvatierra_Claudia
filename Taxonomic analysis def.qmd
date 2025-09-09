@@ -1,0 +1,2709 @@
+---
+title: "Taxonomic analysis"
+author: "Claudia Valdearenas Salvatierra"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+## Taxonomic analysis
+
+```{r message=FALSE, warning=FALSE}
+#LOAD LIBRARIES
+library(vegan)
+library(ape)
+library(phyloseq)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+library(readxl)
+library(tibble)
+library(forcats)
+library(RColorBrewer)
+library(viridis)
+library(writexl) 
+library(scales)
+detach("package:dplyr", unload=TRUE)
+library(dplyr)
+```
+
+```{r}
+#LOAD DATA
+load("cichlids_rarefaction1500_SILVA.rda")
+```
+
+```{r}
+#Total number of taxa
+#EUK + BACT
+ntaxa(cichlid_rar)
+sum(taxa_sums(cichlid_rar)
+```
+
+### Domain level
+
+```{r message=FALSE, warning=FALSE}
+
+cichlids <- (cichlid_rar)
+
+n.taxa = get_taxa_unique(cichlids, "Domain")
+n.taxa
+```
+
+```{r}
+#Preparing data to make a plot
+p <- plot_bar(cichlids, x = "Diet", fill = "Domain")
+head(p)
+dd <- p$data
+head(dd)
+
+a <- dd %>% group_by(Domain, Diet) %>%  # We arrange Domain order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Domain) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Domain <- factor(dd$Domain, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Domain, "")),
+                    labels = c("[none]",  setdiff(a$Domain, "")))
+
+##Set order on the x axis and rename levels 
+
+###DIET
+dd$Diet <- factor(dd$Diet)
+class(dd$Diet)
+levels(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    Diet %in% c("food_fry", "food_marine") ~ "Food",
+    Diet %in% c("water_algae", "water_marine", "water_omni") ~ "Water",
+    TRUE ~ "Other"  # Por si hay más niveles no contemplados
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore", "Food", "Water", "Other"))
+
+###SEX
+dd$Sex <- factor(dd$Sex)
+class(dd$Sex)
+levels(dd$Sex)
+dd$Sex <- factor(dd$Sex,
+                 levels = c("Female","Male","food", "water"))
+
+###Sample_type
+dd$Sample_type <- factor(dd$Sample_type, 
+                         levels = c("Intestine","water", "food"))
+
+```
+
+```{r}
+#Domain profile by DIET
+colors_d <- c(
+  "#8DD3C7",  # Verde aqua claro
+  "#E91E63",
+  "#BEBADA",  # Lavanda
+  "#FB8072",  # Salmón
+  "#80B1D3",  # Azul claro
+  "#FDB462",  # Naranja
+  "#B3DE69",  # Verde lima
+  "#FCCDE5",  # Rosa claro
+  "#BC80BD",
+  "#1E90FF",
+  "#4A90E2",
+  "#CCEBC5",  # Verde menta
+  "#FFED6F",  # Amarillo brillante
+  "#00FFFF"
+)
+
+
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Domain)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") + 
+  labs(x = "Diet") +
+  scale_fill_manual(values = c(
+    "Eukaryota" = "steelblue4",       
+    "Bacteria" = "#aec7e8"
+  )) +
+  theme_bw(base_size = 14)
+
+#Domain profile by ID_specimen
+ggplot(dd, aes(ID_specimen, y = Abundance, fill = Domain)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") + 
+  labs(x = "ID_specimen") +
+  scale_fill_manual(values = c(
+    "Eukaryota" = "steelblue4",       
+    "Bacteria" = "#aec7e8"
+  )) +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#Order the ID_specimen by the type of Diet
+dd <- dd %>% arrange(Diet_new, ID_specimen)
+dd$ID_specimen <- factor(dd$ID_specimen, levels = unique(dd$ID_specimen))
+
+#Colors and esthetic of graph
+labels_df <- dd %>%
+  group_by(ID_specimen, Diet_new) %>%
+  summarise(Abundance = sum(Abundance), Domain = first(Domain)) %>%
+  ungroup()
+
+colors_diet <- c(
+  "Herbivore" = "darkgreen",
+  "Control-Omnivorous" = "orange3",
+  "Carnivore" = "navy",
+  "Food" = "brown3",
+  "Water" = "#4A90E2",
+  "Other" = "grey"
+)
+
+ggplot(dd, aes(ID_specimen, y = Abundance, fill = Domain)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") + 
+  labs(x = "ID_specimen") +
+  scale_fill_manual(values = c(
+    "Eukaryota" = "steelblue4",       
+    "Bacteria" = "#aec7e8"
+  )) +
+  theme_bw(base_size = 14) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    panel.border = element_blank(),  # Quita el borde negro
+    plot.margin = margin(t = 5.5, r = 5.5, b = 60, l = 5.5),  # Aumenta margen inferior
+  ) +
+  geom_text(data = labels_df, aes(x = ID_specimen, y = 0, label = ID_specimen, color = Diet_new),
+            angle = 90, hjust = 1, vjust = 0.5, size = 3, nudge_y = -0.1) +  # Baja más las etiquetas
+  scale_color_manual(name = "Colours by diet", values = colors_diet) +
+guides(color = guide_legend(override.aes = list(shape = 16, size = 5))) +
+coord_cartesian(clip = "off", ylim = c(-0.15, 1))
+
+# Calcular abundancias totales por Dieta
+domain_by_diet <- dd %>%
+  group_by(Diet_new, Domain) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+domain_by_diet
+
+```
+
+### Taxonomic analysis just for Eukaryota domain
+
+### Phylum
+
+```{r}
+cichlid_euk =  subset_taxa(cichlids, Domain == "Eukaryota")
+
+ntaxa(cichlid_euk)
+sum(taxa_sums(cichlid_euk))
+
+n.taxa = get_taxa_unique(cichlid_euk, "Phylum")
+n.taxa
+
+#Preparing data to make a plot
+p <- plot_bar(cichlid_euk, x = "Diet", fill = "Phylum") 
+dd <- p$data
+
+a <- dd %>% group_by(Phylum, Diet) %>%  # We arrange Phylum order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Phylum) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Phylum <- factor(dd$Phylum, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Phylum, "")),
+                    labels = c("[none]",  setdiff(a$Phylum, "")))
+
+##Set order on the x axis and rename levels 
+
+###DIET
+dd$Diet <- factor(dd$Diet)
+class(dd$Diet)
+levels(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    Diet %in% c("food_fry", "food_marine") ~ "Food",
+    Diet %in% c("water_algae", "water_marine", "water_omni") ~ "Water",
+    TRUE ~ "Other"  # Por si hay más niveles no contemplados
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore", "Food", "Water", "Other"))
+
+###SEX
+dd$Sex <- factor(dd$Sex)
+class(dd$Sex)
+levels(dd$Sex)
+dd$Sex <- factor(dd$Sex,
+                 levels = c("Female","Male","food", "water"))
+
+###Sample_type
+dd$Sample_type <- factor(dd$Sample_type, 
+                         levels = c("Intestine","water", "food"))
+
+```
+
+```{r}
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") + 
+  scale_fill_manual(values = c(
+    "Amorphea" = "#4A90E2",       
+    "Archaeplastida" = "lightgreen"
+  )) +
+  labs(x = "Diet") +              
+  theme_bw(base_size = 14)
+
+
+# Calcular abundancias totales por Dieta
+phylum_by_diet <- dd %>%
+  group_by(Diet_new, Phylum) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+phylum_by_diet
+
+##See the phylum profile in a summary table
+
+euk_phyla_table <- dd %>%
+  group_by(Diet_new, Phylum) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  arrange(Diet_new, Phylum) %>%
+  rename(Diet = Diet_new)
+
+print(euk_phyla_table)
+
+
+cichlid_arch =  subset_taxa(cichlids, Phylum == "Archaeplastida")
+data.frame(sample_sums(cichlid_arch))
+
+##Phylum profile by ID_specimen
+ggplot(dd, aes(ID_specimen, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") + 
+  scale_fill_manual(values = c(
+    "Amorphea" = "#4A90E2",       
+    "Archaeplastida" = "lightgreen"
+  )) +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+```
+
+### Genus
+
+```{r}
+#Genus profile by DIET
+genus_levels <- unique(dd$Genus)
+
+# 2. Asignar colores pastel automáticamente
+# Paleta de colores
+colors_d <- c(
+  "#4A90E2",  # rosa pastel - para Choanozoa
+  "lightgreen",  
+  "#E91E63",
+  "#FCCDE5",
+  "#FB8072",  # Salmón
+  "#80B1D3",  # Azul claro
+  "#FDB462",  # Naranja
+  "#B3DE69",  # Verde lima
+  "#FCCDE5",  # Rosa claro
+  "#BC80BD",
+  "#1E90FF",
+  "#4A90E2",
+  "#CCEBC5",  # Verde menta
+  "#FFED6F",  # Amarillo brillante
+  "#00FFFF")  # verde oscuro - para Streptophyta
+
+# 3. Asignar colores a todos los géneros
+# Priorizar tus géneros clave
+genus_colors <- setNames(rep(colors_d, length.out = length(genus_levels)), genus_levels)
+genus_colors["Choanozoa"] <- "#4A90E2"     # rosa pastel
+genus_colors["Streptophyta"] <- "lightgreen"
+
+# 4. Gráfico
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") + 
+  scale_fill_manual(values = genus_colors) +
+  theme_bw(base_size = 14)
+
+
+##See the genus profile in a summary table
+
+euk_genus_table <- dd %>%
+  group_by(Diet_new, Genus) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  arrange(Diet_new, Genus) %>%
+  rename(Diet = Diet_new)
+
+print(euk_genus_table)
+
+##Genus profile by ID_specimen
+ggplot(dd, aes(ID_specimen, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") + 
+  scale_fill_manual(values = genus_colors) +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+### Taxonomic analysis just for Bacteria domain
+
+```{r}
+#LOAD DATA: normalized data for bacteria domain 
+load("cichlids_SILVA_bacteria_may21_NORM.rda")
+
+cichlid_bact<-phyloseq_norm
+```
+
+```{r}
+#Total number of reads
+#BACT
+ntaxa(cichlid_bact)
+```
+
+### Phylum
+
+```{r}
+n.taxa = get_taxa_unique(cichlid_bact, "Phylum")
+n.taxa
+
+sample_abundances <- sample_sums(cichlid_bact)
+
+zero_abund_samples <- names(sample_abundances[sample_abundances == 0])
+zero_abund_samples
+
+#Preparing data to make a plot
+p <- plot_bar(cichlid_bact, x = "Diet", fill = "Phylum") 
+dd <- p$data
+
+a <- dd %>% group_by(Phylum, Diet) %>%  # We arrange Phylum order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Phylum) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Phylum <- factor(dd$Phylum, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Phylum, "")),
+                    labels = c("[none]",  setdiff(a$Phylum, "")))
+
+##Set order on the x axis and rename levels 
+
+###DIET
+dd$Diet <- factor(dd$Diet)
+class(dd$Diet)
+levels(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivorous",
+    Diet %in% c("food_fry", "food_marine","food_algae", "food_omni") ~ "Food",
+    Diet %in% c("water_algae", "water_marine", "water_omni") ~ "Water",
+    TRUE ~ "Other"  # Por si hay más niveles no contemplados
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivorous", "Control-Omnivorous", "Carnivorous", "Food", "Water"))
+
+###SEX
+dd$Sex <- factor(dd$Sex)
+class(dd$Sex)
+levels(dd$Sex)
+dd$Sex <- factor(dd$Sex,
+                 levels = c("Female","Male","food", "water"))
+
+###Sample_type
+dd$Sample_type <- factor(dd$Sample_type, 
+                         levels = c("Intestine","water", "food"))
+
+
+#Remove barcode13, which has an abundance of 0
+
+sample_sums(cichlid_bact) == 0
+names(sample_sums(cichlid_bact)[sample_sums(cichlid_bact) == 0])
+cichlid_bact <- prune_samples(sample_sums(cichlid_bact) > 0, cichlid_bact)
+##Make sure barcode13 is removed
+names(sample_sums(cichlid_bact)[sample_sums(cichlid_bact) == 0])
+```
+
+```{r}
+#Phylum profile by DIET
+
+# Paleta base (para fílums no especificados)
+tableau_palette <- c(
+  "#ff7f0e", "#ffbb78","#98df8a", "#d62728", "#c5b0d5", "#8c564b", "#7f7f7f", "#c7c7c7","#bcbd22", "#dbdb8d"
+)
+
+# Colores asignados a fílums específicos
+fixed_colors <- c(
+  Fusobacteriota   = "#aec7e8",
+  Proteobacteria   = "#1f77b4",
+  Firmicutes       = "#9edae5",
+  Bacteroidota     = "#dbdb8d",
+  Spirochaetota    = "#17becf",
+  Verrucomicrobiota= "#ff9896",
+  Cyanobacteria    = "#2ca02c",
+  Bdellovibrionota = "#9467bd",
+  Planctomycetota  = "#e377c2",
+  Actinobacteriota = "#f7b6d2"
+)
+
+# Obtener todos los fílums únicos del data frame
+all_phyla <- unique(dd$Phylum)
+
+# Fílums que no tienen color fijo
+other_phyla <- setdiff(all_phyla, names(fixed_colors))
+
+# Asignar colores de la paleta a los fílums restantes
+palette_extra <- setNames(
+  rep(tableau_palette, length.out = length(other_phyla)),
+  other_phyla
+)
+
+# Combinar colores fijos con los generados
+phyla_colors <- c(fixed_colors, palette_extra)
+
+# Gráfico
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = phyla_colors) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+# Calcular abundancias totales por Dieta
+phylum_by_diet <- dd %>%
+  group_by(Diet_new, Phylum) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+phylum_by_diet
+
+# Guardar en Excel
+write_xlsx(phylum_by_diet, "phylum_by_diet.xlsx")
+
+```
+
+#### Represent only 10 most abundant phyla
+
+```{r}
+#TOP 10 
+
+# Calcular los 10 fílums más abundantes
+top10_phyla <- dd %>%
+  group_by(Phylum) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 10) %>%
+  pull(Phylum)
+
+# Filtrar el dataset
+dd_top <- dd %>% filter(Phylum %in% top10_phyla)
+
+# Paleta base (para fílums no especificados)
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+# Colores asignados a fílums específicos
+fixed_colors <- c(
+  Fusobacteriota   = "#aec7e8",
+  Proteobacteria   = "#1f77b4",
+  Firmicutes       = "#9edae5",
+  Bacteroidota     = "#dbdb8d",
+  Spirochaetota    = "#17becf",
+  Verrucomicrobiota= "#ff9896",
+  Cyanobacteria    = "#2ca02c",
+  Bdellovibrionota = "#9467bd",
+  Planctomycetota  = "#e377c2",
+  Actinobacteriota = "#f7b6d2"
+)
+
+# Fílums presentes en top10 que no tienen color fijo
+other_phyla <- setdiff(top10_phyla, names(fixed_colors))
+
+# Asignar colores desde la paleta para los restantes
+palette_extra <- setNames(
+  rep(tableau_palette, length.out = length(other_phyla)),
+  other_phyla
+)
+
+# Combinar colores finales
+phyla_colors <- c(fixed_colors[names(fixed_colors) %in% top10_phyla], palette_extra)
+
+# Gráfico
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = phyla_colors) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+
+
+
+```
+
+```{r}
+##Phylum profile by ID_specimen
+ggplot(dd, aes(ID_specimen, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = phyla_colors) +
+  labs(x = "Diet") +
+  scale_x_discrete(expand = expansion(add = c(0.5, 0.5))) +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 0.5))
+
+##Phylum profile by Barcode
+ggplot(dd, aes(Sample, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = phyla_colors) +
+  labs(x = "Diet") +
+  scale_x_discrete(expand = expansion(add = c(0.5, 0.5))) +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 0.5))
+```
+
+```{r}
+##Phylum profile by Barcode ordered by diet 
+
+# Paleta de colores definida antes
+
+# Resumen para etiquetas
+labels_df <- dd %>%
+  group_by(Sample, Diet_new) %>%
+  summarise(Abundance = sum(Abundance), .groups = "drop") %>%
+  arrange(Diet_new, Sample) %>%
+  mutate(Sample = factor(Sample, levels = unique(Sample)))
+
+# Ordenar dd para que Sample tenga el mismo factor ordenado
+dd <- dd %>%
+  mutate(Sample = factor(Sample, levels = levels(labels_df$Sample)))
+
+colors_diet <- c(
+  "Herbivorous" = "forestgreen",
+  "Control-Omnivorous" = "grey",
+  "Carnivorous" = "red3",
+  "Food" = "orange2",
+  "Water" = "lightblue",
+  "Other" = "grey"
+)
+
+ggplot() + 
+  geom_bar(data = dd, aes(x = Sample, y = Abundance, fill = Phylum), 
+           stat = "summary", fun = sum, position = "fill") +
+  geom_text(data = labels_df, aes(x = Sample, y = 0, label = Sample, color = Diet_new),
+            angle = 90, hjust = 1, vjust = 0.5, size = 3, nudge_y = -0.1) +
+  scale_fill_manual(values = phyla_colors) +      
+  scale_color_manual(name = "Colours by diet", values = colors_diet) +
+  labs(x = "Sample") +
+  theme_bw(base_size = 14) +
+  theme(
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    panel.border = element_blank(),
+    plot.margin = margin(t = 5.5, r = 5.5, b = 60, l = 5.5)
+  ) +
+  coord_cartesian(clip = "off", ylim = c(-0.15, 1))
+```
+
+```{r}
+## Phylum profile by Barcode ordered by diet 
+
+# Resumen para etiquetas, excluyendo muestras con abundancia total = 0
+labels_df <- dd %>%
+  group_by(Sample, Diet_new) %>%
+  summarise(Abundance = sum(Abundance), .groups = "drop") %>%
+  filter(Abundance > 0) %>%   # 🔹 aquí filtramos
+  arrange(Diet_new, Sample) %>%
+  mutate(Sample = factor(Sample, levels = unique(Sample)))
+
+# Filtrar dd con las mismas muestras que quedaron en labels_df
+dd <- dd %>%
+  filter(Sample %in% labels_df$Sample) %>%
+  mutate(Sample = factor(Sample, levels = levels(labels_df$Sample)))
+
+colors_diet <- c(
+  "Herbivorous" = "forestgreen",
+  "Control-Omnivorous" = "grey",
+  "Carnivorous" = "red3",
+  "Food" = "orange2",
+  "Water" = "lightblue",
+  "Other" = "grey"
+)
+
+ggplot() + 
+  geom_bar(data = dd, aes(x = Sample, y = Abundance, fill = Phylum), 
+           stat = "summary", fun = sum, position = "fill") +
+  geom_text(data = labels_df, aes(x = Sample, y = 0, label = Sample, color = Diet_new),
+            angle = 90, hjust = 1, vjust = 0.5, size = 3, nudge_y = -0.1) +
+  scale_fill_manual(values = phyla_colors) +      
+  scale_color_manual(name = "Colours by diet", values = colors_diet) +
+  labs(x = "Sample") +
+  theme_bw(base_size = 14) +
+  theme(
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    panel.border = element_blank(),
+    plot.margin = margin(t = 5.5, r = 5.5, b = 60, l = 5.5)
+  ) +
+  coord_cartesian(clip = "off", ylim = c(-0.15, 1))
+
+```
+
+### Class
+
+```{r}
+#CLASS BY DIET
+n.taxa = get_taxa_unique(cichlid_bact, "Class")
+n.taxa
+
+#Preparing data to make a plot
+p <- plot_bar(cichlid_bact, x = "Diet", fill = "Class") 
+dd <- p$data
+
+a <- dd %>% group_by(Class, Diet) %>%  # We arrange Phylum order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Class) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Class <- factor(dd$Class, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Class, "")),
+                    labels = c("[none]",  setdiff(a$Class, "")))
+
+##Set order on the x axis and rename levels 
+
+###DIET
+dd$Diet <- factor(dd$Diet)
+class(dd$Diet)
+levels(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    Diet %in% c("food_fry", "food_marine","food_algae", "food_omni") ~ "Food",
+    Diet %in% c("water_algae", "water_marine", "water_omni") ~ "Water",
+    TRUE ~ "Other"  # Por si hay más niveles no contemplados
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore", "Food", "Water"))
+
+###SEX
+dd$Sex <- factor(dd$Sex)
+class(dd$Sex)
+levels(dd$Sex)
+dd$Sex <- factor(dd$Sex,
+                 levels = c("Female","Male","food", "water"))
+
+###Sample_type
+dd$Sample_type <- factor(dd$Sample_type, 
+                         levels = c("Intestine","water", "food"))
+```
+
+```{r}
+#Class profile by DIET
+levels(dd$Diet)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_class <- length(unique(dd$Class))
+
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Class)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_class)) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+### **CORE CLASS**
+
+```{r}
+# 1. Filtrar solo muestras de intestino
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# 2. Crear tabla de presencia/ausencia por taxón
+presence_absence <- otu_table(cichlid_intestine)
+presence_absence[presence_absence > 0] <- 1  # Presencia/ausencia binaria
+
+# 3. Calcular prevalencia por taxón (filas = taxa, columnas = muestras)
+prevalence_per_taxa <- rowSums(as.matrix(presence_absence)) / nsamples(cichlid_intestine)
+
+# 4. Identificar core taxa (≥ 80% prevalencia)
+core_taxa <- names(prevalence_per_taxa[prevalence_per_taxa >= 0.8])
+
+# 5. Subset para quedarnos solo con esas core taxa
+core_taxa_phy <- prune_taxa(core_taxa, cichlid_intestine)
+
+# 6. Extraer datos del gráfico agrupado por Class
+p <- plot_bar(core_taxa_phy, x = "Diet", fill = "Class")
+dd <- p$data
+
+# 7. Filtrar niveles deseados de Diet y eliminar NA
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore"
+  )) %>%
+  filter(!is.na(Diet_new))
+
+# 8. Establecer orden de dieta y generar paleta
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# 9. Opcional: ordenar clases por abundancia promedio
+a <- dd %>% group_by(Class, Diet_new) %>%
+  summarise(sum_ab = sum(Abundance), .groups = "drop") %>%
+  group_by(Class) %>%
+  summarise(mean_ab = mean(sum_ab)) %>%
+  arrange(mean_ab)
+
+dd$Class <- factor(dd$Class,
+                   levels = c("", setdiff(a$Class, "")),
+                   labels = c("[none]", setdiff(a$Class, "")))
+
+# 10. Gráfico final
+n_class <- length(unique(dd$Class))
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Class)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_class)) +
+  labs(title = "Core Class (≥80% prevalence) - Intestine Samples",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+### Order
+
+```{r}
+#ORDER BY DIET
+n.taxa = get_taxa_unique(cichlid_bact, "Order")
+n.taxa
+```
+
+```{r}
+#ORDER profile by DIET
+levels(dd$Diet)
+
+#There are too many orders (100), so we have to do a "cut-off" to eliminate the samples with an abundance less than 1%
+
+# 1. Calcular la abundancia total de cada taxón
+taxa_abundances <- taxa_sums(cichlid_bact)
+
+# 2. Calcular el porcentaje que representa cada taxón respecto al total
+taxa_rel_abund <- taxa_abundances / sum(taxa_abundances)
+
+# 3. Filtrar los taxones con > 1% de abundancia
+taxa_to_keep <- names(taxa_rel_abund[taxa_rel_abund > 0.01])
+
+# 4. prune taxa
+cichlid_bact_filtered <- prune_taxa(taxa_to_keep, cichlid_bact)
+```
+
+```{r}
+p <- plot_bar(cichlid_bact_filtered, x = "Diet", fill = "Order") 
+dd <- p$data
+
+a <- dd %>% group_by(Order, Diet) %>%  # We arrange Phylum order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Order) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Order <- factor(dd$Order, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Order, "")),
+                    labels = c("[none]",  setdiff(a$Order, "")))
+
+##Set order on the x axis and rename levels 
+
+###DIET
+dd$Diet <- factor(dd$Diet)
+class(dd$Diet)
+levels(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    Diet %in% c("food_fry", "food_marine","food_algae", "food_omni") ~ "Food",
+    Diet %in% c("water_algae", "water_marine", "water_omni") ~ "Water",
+    TRUE ~ "Other"  # Por si hay más niveles no contemplados
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore", "Food", "Water"))
+
+```
+
+```{r}
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_order <- length(unique(dd$Order))
+
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Order)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = ">1% Orders", values = rep(tableau_palette, length.out = n_order)) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+```
+
+### Family
+
+```{r}
+#FAMILY profile by DIET
+n.family = get_taxa_unique(cichlid_bact, "Family") 
+n.family
+
+###Alternative instead of doing top10, but remember to change cichlid_bact to filtered_families in p object 
+#In the case of families, given they are many, we need to filter the taxa to retain only the most abundant families
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_bact), tax_table(cichlid_bact)[, "Family"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+top.TaxaGroup 
+top.TaxaGroup <- top.TaxaGroup[top.TaxaGroup > 0.05] # you can try different values
+top.TaxaGroup
+filtered_families <- subset_taxa(cichlid_bact, Family %in% names(top.TaxaGroup))
+filtered_families 
+
+#preparing the data to make a plot
+p <- plot_bar(cichlid_bact, x = "Diet", fill = "Family")
+
+dd <- p$data
+
+a <- dd %>% group_by(Family, Diet) %>%  # We arrange the Family order to be by abundance
+  summarise(suma = sum(Abundance)) %>%
+  group_by(Family) %>% 
+  summarise(mean_ab = mean(suma)) %>% 
+  arrange(mean_ab)
+
+dd$Family <- factor(dd$Family, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Family, "")),
+                    labels = c("[none]",  setdiff(a$Family, "")))
+```
+
+```{r}
+##Set order on the x axis and rename levels 
+
+###DIET
+dd$Diet <- factor(dd$Diet)
+class(dd$Diet)
+levels(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivorous",
+    Diet %in% c("food_fry", "food_marine","food_algae", "food_omni") ~ "Food",
+    Diet %in% c("water_algae", "water_marine", "water_omni") ~ "Water",
+    TRUE ~ "Other"  # Por si hay más niveles no contemplados
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivorous", "Control-Omnivorous", "Carnivorous", "Food", "Water"))
+
+```
+
+```{r}
+#TOP 10 FAMILIES
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_family <- length(unique(dd$Family))
+
+
+# Filtrar valores inválidos en Family
+dd_clean <- dd %>%
+  filter(!is.na(Family), Family != "NA", Family != "none")
+
+# Calcular las 10 familias más abundantes
+top10_families <- dd_clean %>%
+  group_by(Family) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 10) %>%
+  pull(Family)
+
+top10_families
+
+# Filtrar el dataset para mantener solo esas familias
+dd_top <- dd_clean %>% filter(Family %in% top10_families)
+
+dd_top <- dd_top %>%
+  mutate(Family = fct_recode(Family, "Unclassified" = "[none]"))
+
+# Gráfico
+
+fixed_colors_families <- c(
+  Fusobacteriaceae      = "#aec7e8",
+  Aeromonadaceae        = "#1f77b4",
+  Comamonadaceae        = "#ff9896",
+  Peptostreptococcaceae = "#9edae5",
+  Chromobacteriaceae    = "#c5b0d5",
+  Spirochaetaceae       = "#17becf",
+  Flavobacteriaceae     = "#dbdb8d",
+  Lactobacillaceae      = "#00FFFF",
+  Phormidiaceae         = "#2ca02c",
+  Unclassified                = "#7f7f7f"   
+)
+
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Family)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 10 most abundant families",
+                    values = fixed_colors_families) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+# Calcular abundancias totales por Dieta
+family_by_diet <- dd %>%
+  group_by(Diet_new, Family) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+family_by_diet
+```
+
+```{r}
+
+families_per_diet <- dd_top %>%
+  group_by(Diet_new, Family) %>%
+  summarise(TotalAbundancia = sum(Abundance), .groups = "drop") %>%
+  arrange(Diet_new, desc(TotalAbundancia))
+
+families_per_diet
+
+write_xlsx(families_per_diet, path = "families_per_diet_bact.xlsx")
+
+```
+
+### **CORE FAMILIES**
+
+```{r}
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+
+# 1. Filtrar solo muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# 2. Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_intestine)
+presence_absence[presence_absence > 0] <- 1
+
+# 3. Calcular prevalencia por taxón
+prevalence_per_taxa <- rowSums(as.matrix(presence_absence)) / nsamples(cichlid_intestine)
+
+# 4. Seleccionar core taxa (presentes en ≥80% de las muestras)
+core_taxa <- names(prevalence_per_taxa[prevalence_per_taxa >= 0.8])
+core_taxa_phy <- prune_taxa(core_taxa, cichlid_intestine)
+
+# 5. Obtener datos para el gráfico
+p <- plot_bar(core_taxa_phy, x = "Diet", fill = "Family")
+dd <- p$data
+
+# 6. Asignar nueva variable de dieta y filtrar valores no deseados
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore"
+  )) %>%
+  filter(!is.na(Diet_new))  # Eliminar NA
+
+# 7. Eliminar familias sin nombre ("[none]")
+dd <- dd %>%
+  filter(Family != "")  # Quita entradas vacías antes de asignar "[none]"
+
+# 8. Ordenar niveles de dieta
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# 9. Ordenar familias por abundancia media
+a <- dd %>% group_by(Family, Diet_new) %>%
+  summarise(sum_ab = sum(Abundance), .groups = "drop") %>%
+  group_by(Family) %>%
+  summarise(mean_ab = mean(sum_ab)) %>%
+  arrange(mean_ab)
+
+dd$Family <- factor(dd$Family, levels = a$Family)
+
+# 10. Crear gráfico
+n_family <- length(unique(dd$Family))
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Family)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_family)) +
+  labs(title = "Core Families (≥80% prevalence) - Intestine Samples",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+**Family only carnivores**
+
+```{r}
+#########CARNIVORE
+cichlid_carnivore <- subset_samples(cichlid_intestine, Diet == "Marine")
+
+n.family <- get_taxa_unique(cichlid_carnivore, "Family") 
+n.family
+
+# Filtrar las familias más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_carnivore), tax_table(cichlid_carnivore)[, "Family"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 familias (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas familias en el objeto phyloseq
+filtered_family <- subset_taxa(cichlid_carnivore, Family %in% names(top.TaxaGroup))
+filtered_family
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_family, x = "Diet", fill = "Family")
+dd <- p$data
+
+# Ordenar las familias por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Family, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Family) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Family, nivel vacío renombrado a "[none]"
+dd$Family <- factor(dd$Family,
+                    levels = c("", setdiff(a$Family, "")),
+                    labels = c("[none]", setdiff(a$Family, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Family excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Family), Family != "NA", Family != "none", Family != "[none]", Family != "Unclassified")
+
+# Calcular las 15 familias más abundantes
+top15_family <- dd_clean %>%
+  group_by(Family) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Family)
+
+# Filtrar el dataset para mantener solo esas familias
+dd_top <- dd_clean %>% filter(Family %in% top15_family)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Family)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant families",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+**Family only herbivores**
+
+```{r}
+#########CARNIVORE
+cichlid_herbivore <- subset_samples(cichlid_intestine, Diet == "Algae")
+
+n.family <- get_taxa_unique(cichlid_herbivore, "Family") 
+n.family
+
+# Filtrar las familias más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_herbivore), tax_table(cichlid_herbivore)[, "Family"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 familias (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas familias en el objeto phyloseq
+filtered_family <- subset_taxa(cichlid_herbivore, Family %in% names(top.TaxaGroup))
+filtered_family
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_family, x = "Diet", fill = "Family")
+dd <- p$data
+
+# Ordenar las familias por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Family, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Family) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Family, nivel vacío renombrado a "[none]"
+dd$Family <- factor(dd$Family,
+                    levels = c("", setdiff(a$Family, "")),
+                    labels = c("[none]", setdiff(a$Family, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Family excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Family), Family != "NA", Family != "none", Family != "[none]", Family != "Unclassified")
+
+# Calcular las 15 familias más abundantes
+top15_family <- dd_clean %>%
+  group_by(Family) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Family)
+
+# Filtrar el dataset para mantener solo esas familias
+dd_top <- dd_clean %>% filter(Family %in% top15_family)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Family)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant families",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+```
+
+### Genus
+
+```{r}
+#GENUS profile by DIET
+n.genus = get_taxa_unique(cichlid_bact, "Genus") 
+n.genus
+```
+
+```{r}
+#preparing the data to make a plot
+p <- plot_bar(cichlid_bact, x = "Diet", fill = "Genus")
+
+dd <- p$data
+
+a <- dd %>% group_by(Genus, Diet) %>%  
+  summarise(suma = sum(Abundance)) %>%
+  group_by(Genus) %>% 
+  summarise(mean_ab = mean(suma)) %>% 
+  arrange(mean_ab)
+
+dd$Genus <- factor(dd$Genus, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Genus, "")),
+                    labels = c("[none]",  setdiff(a$Genus, "")))
+```
+
+```{r}
+##Set order on the x axis and rename levels 
+
+###DIET
+dd$Diet <- factor(dd$Diet)
+class(dd$Diet)
+levels(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivorous",
+    Diet %in% c("food_fry", "food_marine","food_algae", "food_omni") ~ "Food",
+    Diet %in% c("water_algae", "water_marine", "water_omni") ~ "Water",
+    TRUE ~ "Other"  # Por si hay más niveles no contemplados
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivorous", "Control-Omnivorous", "Carnivorous", "Food", "Water"))
+
+```
+
+```{r}
+##TOP 15 GENUS
+
+top15_genus <- dd %>%
+  group_by(Genus) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Genus)
+
+top15_genus
+
+```
+
+```{r}
+
+# Filtrar el dataset para mantener solo esas familias
+dd_top <- dd %>% filter(Genus %in% top15_genus)
+
+dd_top <- dd_top %>%
+  mutate(Genus = fct_recode(Genus, "Unclassified" = "[none]"))
+
+# Paleta de colores
+fixed_colors_genus <- c(
+  Cetobacterium = "#aec7e8",
+  Aeromonas = "#1f77b4",
+  Acidovorax = "#ff9896",
+  Romboutsia = "#9edae5",  
+  Crenobacter = "#c5b0d5",
+  Plesiomonas = "#ffbb78",
+  Flavobacterium = "#dbdb8d",
+  Leptospira = "#f7b6d2",
+  Legionella = "#9467bd",
+  Pseudomonas = "#98df8a",
+  Bosea = "orange4",
+  Limnohabitans = "orange",
+  `Allorhizobium-Neorhizobium-Pararhizobium-Rhizobium` = "#e377c2",  
+  `Arthrospira PCC-7345` = "#2ca02c",  
+  Unclassified = "#7f7f7f"
+)
+
+```
+
+```{r}
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant genera",
+                    values = fixed_colors_genus) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+# Calcular abundancias totales por Dieta
+genus_by_diet <- dd %>%
+  group_by(Diet_new, Genus) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+genus_by_diet
+```
+
+```{r}
+unique(dd_top$Genus)
+
+unclassified_pct <- dd_top %>%
+  summarise(
+    pct_unclassified = sum(Abundance[Genus %in% c("Unclassified", "[none]")], na.rm = TRUE) /
+                       sum(Abundance, na.rm = TRUE) * 100
+  )
+
+unclassified_pct
+
+```
+
+```{r}
+genus_per_diet <- dd_top %>%
+  group_by(Diet_new, Genus) %>%
+  summarise(TotalAbundance = sum(Abundance), .groups = "drop") %>%
+  arrange(Diet_new, desc(TotalAbundance))
+
+genus_per_diet
+
+write_xlsx(genus_per_diet, path = "genus_per_diet_bact.xlsx")
+```
+
+### CORE GENERA
+
+```{r}
+# 1. Filtrar solo muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# 2. Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_intestine)
+presence_absence[presence_absence > 0] <- 1
+
+# 3. Calcular prevalencia por taxón
+prevalence_per_taxa <- rowSums(as.matrix(presence_absence)) / nsamples(cichlid_intestine)
+
+# 4. Seleccionar core taxa (presentes en ≥80% de las muestras)
+core_taxa <- names(prevalence_per_taxa[prevalence_per_taxa >= 0.8])
+core_taxa_phy <- prune_taxa(core_taxa, cichlid_intestine)
+
+# 5. Extraer datos para graficar
+p <- plot_bar(core_taxa_phy, x = "Diet", fill = "Genus")
+dd <- p$data
+
+# 6. Crear Diet_new y filtrar niveles no deseados
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore"
+  )) %>%
+  filter(!is.na(Diet_new))  # Eliminar NA
+
+# 7. Eliminar géneros sin nombre ("")
+dd <- dd %>%
+  filter(Genus != "")
+
+# 8. Ordenar niveles de Diet_new
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# 9. Ordenar géneros por abundancia media
+a <- dd %>% group_by(Genus, Diet_new) %>%
+  summarise(sum_ab = sum(Abundance), .groups = "drop") %>%
+  group_by(Genus) %>%
+  summarise(mean_ab = mean(sum_ab)) %>%
+  arrange(mean_ab)
+
+dd$Genus <- factor(dd$Genus, levels = a$Genus)
+
+# 10. Gráfico
+n_genus <- length(unique(dd$Genus))
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd, aes(Diet_new, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_genus)) +
+  labs(title = "Core Genera (≥80% prevalence) - Intestine Samples",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+**Genus only carnivores**
+
+```{r}
+#########CARNIVORE
+cichlid_carnivore <- subset_samples(cichlid_intestine, Diet == "Marine")
+
+n.genus <- get_taxa_unique(cichlid_carnivore, "Genus") 
+n.genus
+
+# Filtrar los géneros más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_carnivore), tax_table(cichlid_carnivore)[, "Genus"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar los top 15 géneros (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esos géneros en el objeto phyloseq
+filtered_genus <- subset_taxa(cichlid_carnivore, Genus %in% names(top.TaxaGroup))
+filtered_genus
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_genus, x = "Diet", fill = "Genus")
+dd <- p$data
+
+# Ordenar los géneros por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Genus, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Genus) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Genus, nivel vacío renombrado a "[none]"
+dd$Genus <- factor(dd$Genus,
+                   levels = c("", setdiff(a$Genus, "")),
+                   labels = c("[none]", setdiff(a$Genus, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Genus excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Genus), Genus != "NA", Genus != "none", Genus != "[none]", Genus != "Unclassified")
+
+# Calcular los 15 géneros más abundantes
+top15_genus <- dd_clean %>%
+  group_by(Genus) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Genus)
+
+# Filtrar el dataset para mantener solo esos géneros
+dd_top <- dd_clean %>% filter(Genus %in% top15_genus)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant genus",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+### Species
+
+```{r}
+tax_table(cichlid_bact)
+# Total de ASVs
+total_ASVs <- nrow(tax_table(cichlid_bact))
+
+# ASVs con especie asignada (no NA ni "unclassified")
+species_assigned <- sum(!is.na(tax_table(cichlid_bact)[,"Species"]) & 
+                          tax_table(cichlid_bact)[,"Species"] != "" & 
+                          tax_table(cichlid_bact)[,"Species"] != "unclassified")
+
+# Porcentaje
+perc_species_ASVs <- (species_assigned / total_ASVs) * 100
+perc_species_ASVs
+
+```
+
+```{r}
+### TOP10 SPECIES
+
+# 1. Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# 2. Extraer datos desde plot_bar
+p <- plot_bar(cichlid_intestine, x = "Diet", fill = "Species")
+dd <- p$data
+
+# 3. Simplificar categorías de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore"
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# 4. Eliminar especies sin nombre
+dd <- dd %>% filter(Species != "[none]" & Species != "")
+
+
+# 5. Obtener top 10 especies por dieta
+top_species_by_diet <- dd %>%
+  group_by(Diet_new, Species) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  arrange(Diet_new, desc(total_abundance)) %>%
+  group_by(Diet_new) %>%
+  slice_max(order_by = total_abundance, n = 10) %>%
+  ungroup()
+
+# 6. Filtrar los datos para cada dieta por separado
+herbivore_top10 <- dd %>%
+  filter(Diet_new == "Herbivore") %>%
+  semi_join(top_species_by_diet, by = c("Diet_new", "Species"))
+
+omnivorous_top10 <- dd %>%
+  filter(Diet_new == "Control-Omnivorous") %>%
+  semi_join(top_species_by_diet, by = c("Diet_new", "Species"))
+
+carnivore_top10 <- dd %>%
+  filter(Diet_new == "Carnivore") %>%
+  semi_join(top_species_by_diet, by = c("Diet_new", "Species"))
+
+# 7. Graficar cada uno por separado
+
+## Herbivore
+p1 <- ggplot(herbivore_top10, aes(x = Species, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar") +
+  labs(title = "Top 10 Species - Herbivore", x = "Species", y = "Total Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+## Control-Omnivorous
+p2 <- ggplot(omnivorous_top10, aes(x = Species, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar") +
+  labs(title = "Top 10 Species - Control-Omnivorous", x = "Species", y = "Total Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+## Carnivore
+p3 <- ggplot(carnivore_top10, aes(x = Species, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar") +
+  labs(title = "Top 10 Species - Carnivore", x = "Species", y = "Total Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") 
+
+# 8. Mostrar los gráficos
+print(p1)
+print(p2)
+print(p3)
+```
+
+```{r}
+#### top 10 species without C. somerae
+
+# 1. Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# 2. Extraer datos desde plot_bar
+p <- plot_bar(cichlid_intestine, x = "Diet", fill = "Species")
+dd <- p$data
+
+# 3. Simplificar categorías de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore"
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# 4. Eliminar especies sin nombre y Cetobacterium somerae
+dd <- dd %>%
+  filter(Species != "[none]" & Species != "" & Species != "Cetobacterium_somerae_")
+
+# 5. Obtener top 10 especies por dieta (sin Cetobacterium somerae)
+top_species_by_diet <- dd %>%
+  group_by(Diet_new, Species) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  arrange(Diet_new, desc(total_abundance)) %>%
+  group_by(Diet_new) %>%
+  slice_max(order_by = total_abundance, n = 10) %>%
+  ungroup()
+
+# 6. Filtrar los datos para cada dieta por separado
+herbivore_top10 <- dd %>%
+  filter(Diet_new == "Herbivore") %>%
+  semi_join(top_species_by_diet, by = c("Diet_new", "Species"))
+
+omnivorous_top10 <- dd %>%
+  filter(Diet_new == "Control-Omnivorous") %>%
+  semi_join(top_species_by_diet, by = c("Diet_new", "Species"))
+
+carnivore_top10 <- dd %>%
+  filter(Diet_new == "Carnivore") %>%
+  semi_join(top_species_by_diet, by = c("Diet_new", "Species"))
+
+# 7. Graficar cada uno por separado
+
+## Herbivore
+p1 <- ggplot(herbivore_top10, aes(x = Species, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar") +
+  labs(title = "Top 10 Species - Herbivore (excluding Cetobacterium somerae)",
+       x = "Species", y = "Total Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+## Control-Omnivorous
+p2 <- ggplot(omnivorous_top10, aes(x = Species, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar") +
+  labs(title = "Top 10 Species - Control-Omnivorous (excluding Cetobacterium somerae)",
+       x = "Species", y = "Total Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+## Carnivore
+p3 <- ggplot(carnivore_top10, aes(x = Species, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar") +
+  labs(title = "Top 10 Species - Carnivore (excluding Cetobacterium somerae)",
+       x = "Species", y = "Total Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+# 8. Mostrar los gráficos
+print(p1)
+print(p2)
+print(p3)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# 1. Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# 2. Extraer datos desde plot_bar
+p <- plot_bar(cichlid_intestine, x = "Diet", fill = "Species")
+dd <- p$data
+
+# 3. Simplificar categorías de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivore",
+    Diet == "Marine" ~ "Carnivore"
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivore", "Carnivore"))
+
+dd <- dd %>% filter(Species != "[none]" & Species != "")
+
+
+# Asegúrate de trabajar con datos resumidos por especie y dieta
+top_species_per_diet <- dd %>%
+  group_by(Diet_new, Species) %>%
+  summarise(Abundance = sum(Abundance)) %>%
+  arrange(Diet_new, desc(Abundance)) %>%
+  group_by(Diet_new) %>%
+  slice_max(order_by = Abundance, n = 10, with_ties = FALSE) %>%
+  ungroup()
+
+# Gráfico de burbujas
+ggplot(top_species_per_diet, aes(x = Diet_new, y = Species, size = Abundance, fill = Diet_new)) +
+  geom_point(shape = 21, color = "black", alpha = 0.7) +
+  scale_size(range = c(3, 15)) +
+  scale_fill_manual(values = c(
+    "Herbivore" = "forestgreen",
+    "Control-Omnivore" = "steelblue",
+    "Carnivore" = "red3"
+  )) +
+  labs(
+    title = "Top 10 most abundant species",
+    x = "Diet",
+    y = "Species",
+    size = "Abundance",
+    fill = "Diet"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right"
+  )
+
+```
+
+**Taxonomic profiles species all together**
+
+```{r}
+# SPECIES profile by DIET
+n.species <- get_taxa_unique(cichlid_bact, "Species") 
+n.species
+
+# Filtrar las especies más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_bact), tax_table(cichlid_bact)[, "Species"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 especies (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas especies en el objeto phyloseq
+filtered_species <- subset_taxa(cichlid_bact, Species %in% names(top.TaxaGroup))
+filtered_species
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd <- p$data
+
+# Ordenar las especies por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Species, nivel vacío renombrado a "[none]"
+dd$Species <- factor(dd$Species,
+                    levels = c("", setdiff(a$Species, "")),
+                    labels = c("[none]", setdiff(a$Species, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Species excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Species), Species != "NA", Species != "none", Species != "[none]", Species != "Unclassified")
+
+# Calcular las 15 especies más abundantes
+top15_species <- dd_clean %>%
+  group_by(Species) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Species)
+
+# Filtrar el dataset para mantener solo esas especies
+dd_top <- dd_clean %>% filter(Species %in% top15_species)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant species",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+
+```
+
+```{r}
+# Calcular abundancias totales por Dieta a nivel Species
+species_by_diet <- dd %>%
+  group_by(Diet_new, Species) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+species_by_diet
+
+```
+
+### Taxonomic profiles specie
+
+```{r}
+#########HERBIVORE
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_herbivore <- subset_samples(cichlid_intestine, Diet == "Algae")
+
+n.species <- get_taxa_unique(cichlid_herbivore, "Species") 
+n.species
+
+# Filtrar las especies más abundantes según suma total en todas las muestras
+taxa_sums_vec <- taxa_sums(cichlid_herbivore)
+species <- as.character(tax_table(cichlid_herbivore)[, "Species"])
+valid <- !is.na(species) & species != ""
+tapply(taxa_sums_vec[valid], species[valid], sum)
+
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_herbivore), tax_table(cichlid_herbivore)[, "Species"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 especies (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas especies en el objeto phyloseq
+filtered_species <- subset_taxa(cichlid_herbivore, Species %in% names(top.TaxaGroup))
+filtered_species
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd <- p$data
+
+# Ordenar las especies por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Species, nivel vacío renombrado a "[none]"
+dd$Species <- factor(dd$Species,
+                    levels = c("", setdiff(a$Species, "")),
+                    labels = c("[none]", setdiff(a$Species, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Species excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Species), Species != "NA", Species != "none", Species != "[none]", Species != "Unclassified")
+
+# Calcular las 15 especies más abundantes
+top15_species <- dd_clean %>%
+  group_by(Species) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Species)
+
+# Filtrar el dataset para mantener solo esas especies
+dd_top <- dd_clean %>% filter(Species %in% top15_species)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant species",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+
+# Calcular abundancias totales por Dieta
+species_by_diet <- dd %>%
+  group_by(Diet_new, Species) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+species_by_diet
+
+#########OMNIVORE
+
+cichlid_omnivore <- subset_samples(cichlid_intestine, Diet == "Control-Omni")
+
+n.species <- get_taxa_unique(cichlid_omnivore, "Species") 
+n.species
+
+# Filtrar las especies más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_omnivore), tax_table(cichlid_omnivore)[, "Species"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 especies (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas especies en el objeto phyloseq
+filtered_species <- subset_taxa(cichlid_omnivore, Species %in% names(top.TaxaGroup))
+filtered_species
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd <- p$data
+
+# Ordenar las especies por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Species, nivel vacío renombrado a "[none]"
+dd$Species <- factor(dd$Species,
+                    levels = c("", setdiff(a$Species, "")),
+                    labels = c("[none]", setdiff(a$Species, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Species excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Species), Species != "NA", Species != "none", Species != "[none]", Species != "Unclassified")
+
+# Calcular las 15 especies más abundantes
+top15_species <- dd_clean %>%
+  group_by(Species) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Species)
+
+# Filtrar el dataset para mantener solo esas especies
+dd_top <- dd_clean %>% filter(Species %in% top15_species)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant species",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+
+
+
+#########CARNIVORE
+cichlid_carnivore <- subset_samples(cichlid_intestine, Diet == "Marine")
+
+n.species <- get_taxa_unique(cichlid_carnivore, "Species") 
+n.species
+
+# Filtrar las especies más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_carnivore), tax_table(cichlid_carnivore)[, "Species"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 especies (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas especies en el objeto phyloseq
+filtered_species <- subset_taxa(cichlid_carnivore, Species %in% names(top.TaxaGroup))
+filtered_species
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd <- p$data
+
+# Ordenar las especies por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Species, nivel vacío renombrado a "[none]"
+dd$Species <- factor(dd$Species,
+                    levels = c("", setdiff(a$Species, "")),
+                    labels = c("[none]", setdiff(a$Species, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Species excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Species), Species != "NA", Species != "none", Species != "[none]", Species != "Unclassified")
+
+# Calcular las 15 especies más abundantes
+top15_species <- dd_clean %>%
+  group_by(Species) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Species)
+
+# Filtrar el dataset para mantener solo esas especies
+dd_top <- dd_clean %>% filter(Species %in% top15_species)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant species",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+# Calcular abundancias totales por Dieta
+species_by_diet <- dd %>%
+  group_by(Diet_new, Species) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+species_by_diet
+```
+
+```{r}
+target_genera <- c("Lactobacillus", "Lactococcus", "Leuconostoc",
+                   "Pediococcus", "Weissella", "Carnobacterium")
+
+# Filtrar el phyloseq por los géneros de interés
+filtered_species <- subset_taxa(cichlid_herbivore, Genus %in% target_genera)
+
+# Preparar datos para ggplot
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd_target <- p$data
+
+# Reusar tu pipeline de limpieza si hace falta (Diet_new, etc.)
+dd_target <- dd_target %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+ggplot(dd_target, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(
+    name = "Selected lactic acid bacteria (by species)",
+    values = tableau_palette
+  ) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+
+
+
+```
+
+```{r}
+# Calcular abundancias totales por Dieta
+species_by_diet <- dd %>%
+  group_by(Diet_new, Species) %>%
+  summarise(total_abund = sum(Abundance), .groups = "drop") %>%
+  group_by(Diet_new) %>%
+  mutate(percent = 100 * total_abund / sum(total_abund)) %>%
+  arrange(Diet_new, desc(percent))
+
+species_by_diet
+
+
+```
+
+#### Removing most abudnant species to have more resolution of other less abundant species
+
+```{r}
+######### HERBIVORE
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_herbivore <- subset_samples(cichlid_intestine, Diet == "Algae")
+
+# 🔹 Eliminar las especies no deseadas directamente del objeto phyloseq
+cichlid_herbivore <- subset_taxa(
+  cichlid_herbivore,
+  !(Species %in% c("Cetobacterium_somerae_", "Aeromonas_veronii_"))
+)
+
+n.species <- get_taxa_unique(cichlid_herbivore, "Species") 
+n.species
+
+# Filtrar las especies más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_herbivore), tax_table(cichlid_herbivore)[, "Species"], sum, na.rm = TRUE),
+  decreasing = TRUE
+)
+
+# Seleccionar las top 15 especies
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas especies en el objeto phyloseq
+filtered_species <- subset_taxa(cichlid_herbivore, Species %in% names(top.TaxaGroup))
+filtered_species
+
+# Preparar los datos para el gráfico
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd <- p$data
+
+# Ordenar las especies por abundancia media
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Species
+dd$Species <- factor(dd$Species,
+                     levels = c("", setdiff(a$Species, "")),
+                     labels = c("[none]", setdiff(a$Species, "")))
+
+# Reordenar niveles de Diet y crear variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Species),
+         Species != "NA",
+         Species != "none",
+         Species != "[none]",
+         Species != "Unclassified")
+
+# 🔹 Asegurar que las especies no deseadas tampoco pasen aquí
+dd_clean <- dd_clean %>%
+  filter(!(Species %in% c("Cetobacterium_somerae_", "Aeromonas_veronii_")))
+
+# Calcular top 15 especies
+top15_species <- dd_clean %>%
+  group_by(Species) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Species)
+
+# Filtrar dataset para mantener solo esas especies
+dd_top <- dd_clean %>% filter(Species %in% top15_species)
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+# Gráfico
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant species",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+cichlid_omnivore <- subset_samples(cichlid_intestine, Diet == "Control-Omni")
+
+n.species <- get_taxa_unique(cichlid_omnivore, "Species") 
+n.species
+
+# 🔹 Eliminar las especies no deseadas directamente del objeto phyloseq
+cichlid_carnivore <- subset_taxa(
+  cichlid_carnivore,
+  !(Species %in% c("Cetobacterium_somerae_"))
+)
+
+# Filtrar las especies más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_omnivore), tax_table(cichlid_omnivore)[, "Species"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 especies (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas especies en el objeto phyloseq
+filtered_species <- subset_taxa(cichlid_omnivore, Species %in% names(top.TaxaGroup))
+filtered_species
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd <- p$data
+
+# Ordenar las especies por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Species, nivel vacío renombrado a "[none]"
+dd$Species <- factor(dd$Species,
+                    levels = c("", setdiff(a$Species, "")),
+                    labels = c("[none]", setdiff(a$Species, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Species excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Species), Species != "NA", Species != "none", Species != "[none]", Species != "Unclassified")
+
+# 🔹 Asegurar que las especies no deseadas tampoco pasen aquí
+dd_clean <- dd_clean %>%
+  filter(!(Species %in% c("Cetobacterium_somerae_")))
+
+# Calcular las 15 especies más abundantes
+top15_species <- dd_clean %>%
+  group_by(Species) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Species)
+
+# Filtrar el dataset para mantener solo esas especies
+dd_top <- dd_clean %>% filter(Species %in% top15_species)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant species",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+```
+
+```{r}
+#########CARNIVORE
+cichlid_carnivore <- subset_samples(cichlid_intestine, Diet == "Marine")
+
+n.species <- get_taxa_unique(cichlid_carnivore, "Species") 
+n.species
+
+# 🔹 Eliminar las especies no deseadas directamente del objeto phyloseq
+cichlid_carnivore <- subset_taxa(
+  cichlid_carnivore,
+  !(Species %in% c("Cetobacterium_somerae_", "Aeromonas_veronii_"))
+)
+
+# Filtrar las especies más abundantes según suma total en todas las muestras
+top.TaxaGroup <- sort(
+  tapply(taxa_sums(cichlid_carnivore), tax_table(cichlid_carnivore)[, "Species"], sum, na.rm = TRUE),
+  decreasing = TRUE)
+
+# Seleccionar las top 15 especies (puedes ajustar el número o el umbral)
+top.TaxaGroup <- head(top.TaxaGroup, 15)
+
+# Filtrar solo esas especies en el objeto phyloseq
+filtered_species <- subset_taxa(cichlid_carnivore, Species %in% names(top.TaxaGroup))
+filtered_species
+
+# Preparar los datos para el gráfico (usar el objeto filtrado)
+p <- plot_bar(filtered_species, x = "Diet", fill = "Species")
+dd <- p$data
+
+# Ordenar las especies por abundancia media para definir el orden en el gráfico
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(suma = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>%
+  summarise(mean_ab = mean(suma)) %>%
+  arrange(mean_ab)
+
+# Factor con orden para Species, nivel vacío renombrado a "[none]"
+dd$Species <- factor(dd$Species,
+                    levels = c("", setdiff(a$Species, "")),
+                    labels = c("[none]", setdiff(a$Species, "")))
+
+# Reordenar niveles de Diet y crear la variable Diet_new
+dd$Diet <- factor(dd$Diet)
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Diet_new))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# Filtrar datos válidos en Species excluyendo "[none]" y "Unclassified"
+dd_clean <- dd %>%
+  filter(!is.na(Species), Species != "NA", Species != "none", Species != "[none]", Species != "Unclassified")
+
+# 🔹 Asegurar que las especies no deseadas tampoco pasen aquí
+dd_clean <- dd_clean %>%
+  filter(!(Species %in% c("Cetobacterium_somerae_", "Aeromonas_veronii_")))
+
+# Calcular las 15 especies más abundantes
+top15_species <- dd_clean %>%
+  group_by(Species) %>%
+  summarise(TotalAbundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(TotalAbundance)) %>%
+  slice_head(n = 15) %>%
+  pull(Species)
+
+# Filtrar el dataset para mantener solo esas especies
+dd_top <- dd_clean %>% filter(Species %in% top15_species)
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+ggplot(dd_top, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(name = "Top 15 most abundant species",
+                    values = tableau_palette) +
+  labs(x = "Diet") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+```
+
+```{r}
+#########HERBIVORE
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_herbivore <- subset_samples(cichlid_intestine, Diet == "Algae")
+
+n.species <- get_taxa_unique(cichlid_herbivore, "Species") 
+n.species
+
+# Filtrar la tabla de abundancias para la especie de interés
+especie_obj <- subset_taxa(cichlid_herbivore, Species == "Flavobacterium_psychrophilum_")
+
+# Obtener la tabla de abundancia
+abundancia <- otu_table(especie_obj)
+
+# Si quieres la abundancia total sumada en todas las muestras:
+abundancia_total <- sum(abundancia)
+
+# Si quieres abundancia por muestra:
+abundancia_por_muestra <- colSums(abundancia)
+
+abundancia_total
+abundancia_por_muestra
+
+```
+
+```{r}
+# LOAD DATA: normalized data for bacteria domain 
+load("cichlids_SILVA_bacteria_may21_NORM.rda")
+
+cichlid_bact <- phyloseq_norm
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# Preparing data to make a plot
+p <- plot_bar(cichlid_bact, x = "Diet", fill = "Species") 
+dd <- p$data
+
+a <- dd %>% 
+  group_by(Species, Diet) %>%  
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Species) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Species <- factor(dd$Species, # We make sure the first value is for the ones without name 
+                     levels = c("", setdiff(a$Species, "")),
+                     labels = c("[none]",  setdiff(a$Species, "")))
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivorous"
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# ---- Calcular abundancia de Cetobacterium_somerae_ ----
+
+# Abundancia total de todas las especies en todas las muestras
+total_ab <- sum(dd$Abundance)
+
+# Abundancia total de Cetobacterium_somerae_
+cetobo_ab <- dd %>%
+  filter(Species == "Cetobacterium_somerae_") %>%
+  summarise(total = sum(Abundance)) %>%
+  pull(total)
+
+# Calcular porcentaje
+perc_cetobo <- (cetobo_ab / total_ab) * 100
+perc_cetobo
+
+```
+
+```{r}
+# LOAD DATA: normalized data for bacteria domain 
+load("cichlids_SILVA_bacteria_may21_NORM.rda")
+
+cichlid_bact <- phyloseq_norm
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# Preparing data to make a plot
+p <- plot_bar(cichlid_bact, x = "Diet", fill = "Species") 
+dd <- p$data
+
+a <- dd %>% 
+  group_by(Species, Diet) %>%  
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Species) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Species <- factor(dd$Species, # We make sure the first value is for the ones without name 
+                     levels = c("", setdiff(a$Species, "")),
+                     labels = c("[none]",  setdiff(a$Species, "")))
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivorous"
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# ---- Calcular abundancia de Cetobacterium_somerae_ ----
+
+# Abundancia total de todas las especies en todas las muestras
+total_ab <- sum(dd$Abundance)
+
+# Abundancia total de Cetobacterium_somerae_
+cetobo_ab <- dd %>%
+  filter(Species == "Cetobacterium_somerae_") %>%
+  summarise(total = sum(Abundance)) %>%
+  pull(total)
+
+# Calcular porcentaje
+perc_cetobo <- (cetobo_ab / total_ab) * 100
+perc_cetobo
+
+# ---- Calcular abundancia de Fusobacteriota, Proteobacteria, Firmicutes y Bacteroidota ----
+
+######### % de abundancia 
+
+perc_phylum <- dd %>%
+  filter(Phylum %in% c("Fusobacteriota", "Proteobacteria", 
+                       "Firmicutes", "Bacteroidota")) %>%
+  group_by(Phylum) %>%
+  summarise(total = sum(Abundance)) %>%
+  mutate(perc = (total / total_ab) * 100)
+
+perc_phylum
+
+######### % de reads
+
+
+# LOAD DATA: normalized data for bacteria domain 
+load("cichlids_SILVA_bacteria_may21_NORM.rda")
+
+cichlid_bact <- phyloseq_norm
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+
+# Preparing data to make a plot
+p <- plot_bar(cichlid_bact, x = "Diet", fill = "Species") 
+dd <- p$data
+
+a <- dd %>% 
+  group_by(Species, Diet) %>%  
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Species) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Species <- factor(dd$Species, # We make sure the first value is for the ones without name 
+                     levels = c("", setdiff(a$Species, "")),
+                     labels = c("[none]",  setdiff(a$Species, "")))
+
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivorous"
+  ))
+
+dd$Diet_new <- factor(dd$Diet_new,
+                      levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# ---- Calcular presencia de cada phylum en % de reads totales ----
+
+# Total de reads en todas las muestras
+total_reads <- sum(dd$Abundance)
+
+# Reads por phylum de interés
+reads_phylum <- dd %>%
+  filter(Phylum %in% c("Fusobacteriota", "Proteobacteria", 
+                       "Firmicutes", "Bacteroidota")) %>%
+  group_by(Phylum) %>%
+  summarise(total_reads_phylum = sum(Abundance)) %>%
+  mutate(presence_perc = (total_reads_phylum / total_reads) * 100)
+
+reads_phylum
+
+
+```
