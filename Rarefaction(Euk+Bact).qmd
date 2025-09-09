@@ -1,0 +1,128 @@
+---
+title: "Rarefaction(Euk+Bact)"
+author: "Claudia Valdearenas"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r message=FALSE, warning=FALSE}
+#### LOAD LIBRARIES ####
+
+library(vegan)
+library(ape)
+library(phyloseq)
+library(ggplot2)
+library(randomcoloR)
+library(dplyr)
+```
+
+```{r}
+#Load the phyloseq object
+
+load("cichlids_SILVA.rda")
+cichlids
+metadata <- sample_data(cichlids)
+otutable <-otu_table(cichlids)
+```
+
+### **Justification of rarefaction**
+
+```{r}
+### NUMBER OF SEQUENCE READS PER SAMPLE ####
+
+reads<-sort(sample_sums(cichlids)) #see total reads per sample
+reads #number of sequences per sample. Five have <1500 reads
+max(reads)
+min(reads)
+
+
+#Plot the reads per sample
+
+reads <- sort(sample_sums(cichlids))
+ids <- names(reads)  # los nombres ya están en el mismo orden que los valores
+
+barplot(reads,
+        names.arg = ids,
+        las = 3,
+        cex.names = 0.7,
+        main = "Sequence reads per sample",
+        ylab = "Number of reads")
+
+```
+
+```{r}
+
+####ORDER DATA
+
+# 1. Obtener los reads por muestra
+reads <- sample_sums(cichlids)
+
+# 2. Convertir sample_data a data.frame y alinear el orden de las muestras
+metadata <- data.frame(sample_data(cichlids))
+
+# 3. Reordenar metadata para que coincida con el orden de sample_sums
+metadata <- metadata[match(names(reads), rownames(metadata)), ]
+
+# 4. Verificar que están alineados (esto debería devolver TRUE)
+all(rownames(metadata) == names(reads))
+
+####  RAREFACTION CURVE #### 
+
+#Plot number of new sequence IDs per sequencing depth, adding each time 1000 new sequences
+
+x<-data.frame(t(otutable)) #transpose the data
+
+rarecurve(x, step = 1000, cex = 0.6, label = FALSE, xlim=c(0, 110000))
+```
+
+```{r}
+#Check the samples that have low sequence coverage 
+cichlids_poor_cover<-prune_samples(sample_sums(cichlids) < 1500, cichlids)
+metadatapoor <- sample_data(cichlids_poor_cover)
+head(metadatapoor)
+```
+
+**Filter decided: \>1500 reads**
+
+### **Rarefaction**
+
+```{r}
+###RAREFY THE DATA #### 
+load("cichlids_SILVA.rda")
+cichlid_rar <- rarefy_even_depth(cichlids, rngseed= 81, sample.size = 1500) # rarefy to 1500 sequences. SOme samples will be discarded because they don't have the minimum sample size
+
+sample_sums(cichlid_rar) #check that the rarefaction worked. All samples should have the same number of total reads
+
+cichlid_rar #the new phyloseq object
+
+#See dimnensions 
+
+cat("otu_table() OTU Table: [", dim(otu_table(cichlid_rar))[1], "taxa and", dim(otu_table(cichlid_rar))[2], "samples ]\n")
+
+cat("sample_data() Sample Data: [", dim(sample_data(cichlid_rar))[1], "samples by", dim(sample_data(cichlid_rar))[2], "sample variables ]\n")
+
+cat("tax_table() Taxonomy Table: [", dim(tax_table(cichlid_rar))[1], "taxa by", dim(tax_table(cichlid_rar))[2], "taxonomic ranks ]\n")
+
+```
+
+5 samples removed because they contained fewer reads than \`sample.size\`. Up to first five removed samples are:
+
+-   barcode13
+
+-   barcode01
+
+-   barcode06
+
+-   barcode71
+
+-   barcode35
+
+**phyloseq-class experiment-level object**
+
+otu_table() OTU Table: \[ 1946 taxa and 86 samples \]
+
+sample_data() Sample Data: \[ 86 samples by 13 sample variables \]
+
+tax_table() Taxonomy Table: \[ 1946 taxa by 7 taxonomic ranks \]
