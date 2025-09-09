@@ -1,0 +1,72 @@
+---
+title: "Normalisation Bact 2"
+author: "Claudia Valdearenas"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r message=FALSE, warning=FALSE}
+#### LOAD LIBRARIES ####
+
+library(vegan)
+library(ape)
+library(phyloseq)
+library(ggplot2)
+library(randomcoloR)
+library(dplyr)
+```
+
+```{r}
+#Load the phyloseq object
+load("cichlids_SILVA_bacteria_new.rda")
+```
+
+```{r, echo = TRUE, results = "hide"}
+
+prune_taxa(taxa_sums(cichlids) > 0, cichlids)
+ntaxa(cichlids)
+head(taxa_sums(cichlids))
+sum(taxa_sums(cichlids) > 0)
+
+otu_table(cichlids)
+
+class(cichlids)
+
+taxa_names(cichlids)
+
+sum(taxa_sums(cichlids) == 0)
+
+validObject(cichlids)
+
+```
+
+```{r}
+###Transform the abundance values to normalise them by sample, converting them into relative proportions.
+
+phyloseq_norm <- transform_sample_counts(cichlids, function(x) {
+  if (sum(x) == 0) {
+    # Retorna un vector de ceros con los mismos nombres que x
+    return(setNames(rep(0, length(x)), names(x)))
+  } else {
+    return(x / sum(x))
+  }
+})
+
+validObject(phyloseq_norm) 
+otu_table(phyloseq_norm)[1:5, 1:5]
+
+```
+
+```{r, echo = TRUE, results = "hide"}
+ntaxa(phyloseq_norm)
+taxa_sums(phyloseq_norm) #proportion of sequence counts per bacteria ID
+sum(taxa_sums(phyloseq_norm))
+```
+
+```{r}
+sample_sums(phyloseq_norm)#proportion of sequence counts per sample (it should be 1)
+phyloseq_norm
+save(phyloseq_norm, file="cichlids_SILVA_bacteria_may21_NORM.rda")
+```
