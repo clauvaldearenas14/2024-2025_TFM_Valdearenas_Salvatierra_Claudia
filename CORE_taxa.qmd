@@ -1,0 +1,1669 @@
+---
+title: "CORE taxa"
+format: html
+editor: visual
+---
+
+## CORE HERBIVORES
+
+## Phyla
+
+```{r}
+#LOAD DATA: normalized data for bacteria domain 
+load("cichlids_SILVA_bacteria_may21_NORM.rda")
+
+cichlid_bact<-phyloseq_norm
+```
+
+```{r}
+##HERBIVORE
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_herbivore <- subset_samples(cichlid_intestine, Diet == "Algae")
+
+cichlid_herbivore <- prune_samples(sample_sums(cichlid_herbivore) > 0, cichlid_herbivore)
+
+p <- plot_bar(cichlid_herbivore, x = "Diet", fill = "Phylum") 
+dd <- p$data
+
+a <- dd %>% group_by(Phylum, Diet) %>%  # We arrange Phylum order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Phylum) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Phylum <- factor(dd$Phylum, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Phylum, "")),
+                    labels = c("[none]",  setdiff(a$Phylum, "")))
+
+
+### Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore"))
+
+
+# Colores asignados a fílums específicos
+fixed_colors <- c(
+  Fusobacteriota   = "#aec7e8",
+  Proteobacteria   = "#1f77b4",
+  Firmicutes       = "#9edae5",
+  Bacteroidota     = "#dbdb8d",
+  Spirochaetota    = "#17becf",
+  Verrucomicrobiota= "#ff9896",
+  Cyanobacteria    = "#2ca02c",
+  Bdellovibrionota = "#9467bd",
+  Planctomycetota  = "#e377c2",
+  Actinobacteriota = "#f7b6d2"
+)
+
+
+# Crear tabla de presencia/ausencia por fílum y muestra solo para herbívoros
+presence_absence <- otu_table(cichlid_herbivore)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de phylum
+taxa_phylum <- tax_table(cichlid_herbivore)[, "Phylum"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Phylum <- taxa_phylum[rownames(otu_df)]
+
+# Calcular prevalencia por phylum solo en herbívoros
+prevalence_table <- otu_df %>%
+  group_by(Phylum) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_herbivore))
+
+# Filtrar phyla presentes en ≥ 80% de las muestras herbívoras
+core_phyla <- prevalence_table %>%
+  filter(prevalence_percent >= 0.70) %>%
+  pull(Phylum)
+
+# Filtrar datos originales para incluir solo core phyla y herbívoros
+dd_core <- dd %>%
+  filter(Phylum %in% core_phyla) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con los core phyla en herbívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = fixed_colors) +
+  labs(title = "Cichlids Core Phyla (≥70% samples) - Herbivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+```
+
+```{r}
+abundancia_relativa_core_phyla <- dd_core %>%
+  group_by(Phylum) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_phyla)
+
+```
+
+## Class
+
+```{r}
+
+p <- plot_bar(cichlid_herbivore, x = "Diet", fill = "Class") 
+dd <- p$data
+
+a <- dd %>% group_by(Class, Diet) %>%  # We arrange Class order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Class) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Class <- factor(dd$Class, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Class, "")),
+                    labels = c("[none]",  setdiff(a$Class, "")))
+
+
+### Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore"))
+
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_class <- length(unique(dd$Class))
+
+# Crear tabla de presencia/ausencia por fílum y muestra solo para herbívoros
+presence_absence <- otu_table(cichlid_herbivore)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de phylum
+taxa_class <- tax_table(cichlid_herbivore)[, "Class"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Class <- taxa_class[rownames(otu_df)]
+
+# Calcular prevalencia por phylum solo en herbívoros
+prevalence_table <- otu_df %>%
+  group_by(Class) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_herbivore))
+
+# Filtrar phyla presentes en ≥ 80% de las muestras herbívoras
+core_class <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Class)
+
+# Filtrar datos originales para incluir solo core phyla y herbívoros
+dd_core <- dd %>%
+  filter(Class %in% core_class) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con los core phyla en herbívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Class)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_class)) +
+  labs(title = "Cichlids Core Class (≥80% samples) - Herbivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_class <- dd_core %>%
+  group_by(Class) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_class)
+```
+
+## Order
+
+```{r}
+# Crear gráfico base
+p <- plot_bar(cichlid_herbivore, x = "Diet", fill = "Order") 
+dd <- p$data
+
+# Ordenar órdenes por abundancia media
+a <- dd %>% 
+  group_by(Order, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Order) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Order <- factor(dd$Order,
+                   levels = c("", setdiff(a$Order, "")),
+                   labels = c("[none]", setdiff(a$Order, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_order <- length(unique(dd$Order))
+
+# Crear tabla de presencia/ausencia por orden y muestra
+presence_absence <- otu_table(cichlid_herbivore)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Order
+taxa_order <- tax_table(cichlid_herbivore)[, "Order"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Order <- taxa_order[rownames(otu_df)]
+
+# Calcular prevalencia por orden en muestras herbívoras
+prevalence_table <- otu_df %>%
+  group_by(Order) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_herbivore))
+
+# Filtrar órdenes presentes en ≥80% de las muestras
+core_order <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Order)
+
+# Filtrar datos para core orders y muestras herbívoras
+dd_core <- dd %>%
+  filter(Order %in% core_order) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras para órdenes prevalentes
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Order)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_order)) +
+  labs(title = "Cichlids Core Orders (≥80% samples) - Herbivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_order <- dd_core %>%
+  group_by(Order) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_order)
+```
+
+## Family
+
+```{r}
+# Crear gráfico base
+p <- plot_bar(cichlid_herbivore, x = "Diet", fill = "Family") 
+dd <- p$data
+
+# Ordenar familias por abundancia media
+a <- dd %>% 
+  group_by(Family, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Family) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Family <- factor(dd$Family,
+                   levels = c("", setdiff(a$Family, "")),
+                   labels = c("[none]", setdiff(a$Family, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_family <- length(unique(dd$Family))
+
+# Crear tabla de presencia/ausencia por familia y muestra
+presence_absence <- otu_table(cichlid_herbivore)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Family
+taxa_family <- tax_table(cichlid_herbivore)[, "Family"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Family <- taxa_family[rownames(otu_df)]
+
+# Calcular prevalencia por familia en muestras herbívoras
+prevalence_table <- otu_df %>%
+  group_by(Family) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_herbivore))
+
+# Filtrar familias presentes en ≥80% de las muestras
+core_family <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Family)
+
+# Filtrar datos para core families y muestras herbívoras
+dd_core <- dd %>%
+  filter(Family %in% core_family) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras para familias prevalentes
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Family)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_family)) +
+  labs(title = "Cichlids Core Families (≥80% samples) - Herbivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_family <- dd_core %>%
+  group_by(Family) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_family)
+```
+
+## Genus
+
+```{r}
+# Crear gráfico base
+p <- plot_bar(cichlid_herbivore, x = "Diet", fill = "Genus") 
+dd <- p$data
+
+# Ordenar géneros por abundancia media
+a <- dd %>% 
+  group_by(Genus, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Genus) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Genus <- factor(dd$Genus,
+                   levels = c("", setdiff(a$Genus, "")),
+                   labels = c("[none]", setdiff(a$Genus, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_genus <- length(unique(dd$Genus))
+
+# Crear tabla de presencia/ausencia por género y muestra
+presence_absence <- otu_table(cichlid_herbivore)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Genus
+taxa_genus <- tax_table(cichlid_herbivore)[, "Genus"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Genus <- taxa_genus[rownames(otu_df)]
+
+# Calcular prevalencia por género en muestras herbívoras
+prevalence_table <- otu_df %>%
+  group_by(Genus) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_herbivore))
+
+# Filtrar géneros presentes en ≥80% de las muestras
+core_genus <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Genus)
+
+# Filtrar datos para core géneros y muestras herbívoras
+dd_core <- dd %>%
+  filter(Genus %in% core_genus) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras para géneros prevalentes
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_genus)) +
+  labs(title = "Cichlids Core Genera (≥80% samples) - Herbivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_genus <- dd_core %>%
+  group_by(Genus) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_genus)
+```
+
+## Species
+
+```{r}
+# Crear gráfico base
+p <- plot_bar(cichlid_herbivore, x = "Diet", fill = "Species") 
+dd <- p$data
+
+# Ordenar especies por abundancia media
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Species <- factor(dd$Species,
+                     levels = c("", setdiff(a$Species, "")),
+                     labels = c("[none]", setdiff(a$Species, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Algae" ~ "Herbivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_species <- length(unique(dd$Species))
+
+# Crear tabla de presencia/ausencia por especie y muestra
+presence_absence <- otu_table(cichlid_herbivore)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Species
+taxa_species <- tax_table(cichlid_herbivore)[, "Species"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Species <- taxa_species[rownames(otu_df)]
+
+# Calcular prevalencia por especie en muestras herbívoras
+prevalence_table <- otu_df %>%
+  group_by(Species) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_herbivore))
+
+# Filtrar especies presentes en ≥80% de las muestras
+core_species <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Species)
+
+# Filtrar datos para especies core y muestras herbívoras
+dd_core <- dd %>%
+  filter(Species %in% core_species) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras para especies prevalentes
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_species)) +
+  labs(title = "Cichlids Core Species (≥70% samples) - Herbivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+```
+
+```{r}
+abundancia_relativa_core_species <- dd_core %>%
+  group_by(Species) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_species)
+```
+
+# OMNIVORES
+
+## Phyla
+
+```{r}
+
+##OMNIVORES
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_omni <- subset_samples(cichlid_intestine, Diet == "Control-Omni")
+
+cichlid_omni <- prune_samples(sample_sums(cichlid_omni) > 0, cichlid_omni)
+
+p <- plot_bar(cichlid_omni, x = "Diet", fill = "Phylum") 
+dd <- p$data
+
+a <- dd %>% group_by(Phylum, Diet) %>%  # We arrange Phylum order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Phylum) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Phylum <- factor(dd$Phylum, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Phylum, "")),
+                    labels = c("[none]",  setdiff(a$Phylum, "")))
+
+
+### Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Control-Omni" ~ "Omnivore"))
+
+# Colores asignados a fílums específicos
+fixed_colors <- c(
+  Fusobacteriota   = "#aec7e8",
+  Proteobacteria   = "#1f77b4",
+  Firmicutes       = "#9edae5",
+  Bacteroidota     = "#dbdb8d",
+  Spirochaetota    = "#17becf",
+  Verrucomicrobiota= "#ff9896",
+  Cyanobacteria    = "#2ca02c",
+  Bdellovibrionota = "#9467bd",
+  Planctomycetota  = "#e377c2",
+  Actinobacteriota = "#f7b6d2"
+)
+
+
+# Crear tabla de presencia/ausencia por fílum y muestra solo para herbívoros
+presence_absence <- otu_table(cichlid_omni)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de phylum
+taxa_phylum <- tax_table(cichlid_omni)[, "Phylum"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Phylum <- taxa_phylum[rownames(otu_df)]
+
+# Calcular prevalencia por phylum solo en herbívoros
+prevalence_table <- otu_df %>%
+  group_by(Phylum) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_omni))
+
+# Filtrar phyla presentes en ≥ 80% de las muestras herbívoras
+core_phyla <- prevalence_table %>%
+  filter(prevalence_percent >= 0.80) %>%
+  pull(Phylum)
+
+# Filtrar datos originales para incluir solo core phyla y herbívoros
+dd_core <- dd %>%
+  filter(Phylum %in% core_phyla) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con los core phyla en herbívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = fixed_colors) +
+  labs(title = "Cichlids Core Phyla (≥80% samples) - Omnivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+```
+
+```{r}
+abundancia_relativa_core_phyla <- dd_core %>%
+  group_by(Phylum) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_phyla)
+```
+
+## Class
+
+```{r}
+p <- plot_bar(cichlid_omni, x = "Diet", fill = "Class") 
+dd <- p$data
+
+a <- dd %>% group_by(Class, Diet) %>%  # We arrange Class order by abundance
+  summarise(sum = sum(Abundance)) %>%
+  group_by(Class) %>% 
+  summarise(mean_ab = mean(sum)) %>% 
+  arrange(mean_ab)
+
+dd$Class <- factor(dd$Class, # We make sure the first value is for the ones without name 
+                    levels = c("", setdiff(a$Class, "")),
+                    labels = c("[none]",  setdiff(a$Class, "")))
+
+
+### Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Control-Omni" ~ "Omnivore"))
+
+
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_class <- length(unique(dd$Class))
+
+# Crear tabla de presencia/ausencia por fílum y muestra solo para herbívoros
+presence_absence <- otu_table(cichlid_omni)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de phylum
+taxa_class <- tax_table(cichlid_omni)[, "Class"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Class <- taxa_class[rownames(otu_df)]
+
+# Calcular prevalencia por phylum solo en herbívoros
+prevalence_table <- otu_df %>%
+  group_by(Class) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_omni))
+
+# Filtrar phyla presentes en ≥ 80% de las muestras herbívoras
+core_class <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Class)
+
+# Filtrar datos originales para incluir solo core phyla y herbívoros
+dd_core <- dd %>%
+  filter(Class %in% core_class) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con los core phyla en herbívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Class)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_class)) +
+  labs(title = "Cichlids Core Class (≥80% samples) - Omnivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_class <- dd_core %>%
+  group_by(Class) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_class)
+```
+
+## Order
+
+```{r}
+# Crear gráfico base con Order
+p <- plot_bar(cichlid_omni, x = "Diet", fill = "Order") 
+dd <- p$data
+
+# Ordenar órdenes por abundancia media
+a <- dd %>% 
+  group_by(Order, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Order) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Order <- factor(dd$Order,
+                   levels = c("", setdiff(a$Order, "")),
+                   labels = c("[none]", setdiff(a$Order, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Control-Omni" ~ "Omnivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_order <- length(unique(dd$Order))
+
+# Crear tabla de presencia/ausencia por orden y muestra solo para omnívoros
+presence_absence <- otu_table(cichlid_omni)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Order
+taxa_order <- tax_table(cichlid_omni)[, "Order"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Order <- taxa_order[rownames(otu_df)]
+
+# Calcular prevalencia por orden solo en omnívoros
+prevalence_table <- otu_df %>%
+  group_by(Order) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_omni))
+
+# Filtrar órdenes presentes en ≥ 80% de las muestras omnívoras
+core_order <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Order)
+
+# Filtrar datos originales para incluir solo core orders y omnívoros
+dd_core <- dd %>%
+  filter(Order %in% core_order) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con los core orders en omnívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Order)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_order)) +
+  labs(title = "Cichlids Core Orders (≥80% samples) - Omnivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_order <- dd_core %>%
+  group_by(Order) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_order)
+```
+
+## Family
+
+```{r}
+# Crear gráfico base con Family
+p <- plot_bar(cichlid_omni, x = "Diet", fill = "Family") 
+dd <- p$data
+
+# Ordenar familias por abundancia media
+a <- dd %>% 
+  group_by(Family, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Family) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Family <- factor(dd$Family,
+                    levels = c("", setdiff(a$Family, "")),
+                    labels = c("[none]", setdiff(a$Family, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Control-Omni" ~ "Omnivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_family <- length(unique(dd$Family))
+
+# Crear tabla de presencia/ausencia por familia y muestra solo para omnívoros
+presence_absence <- otu_table(cichlid_omni)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Family
+taxa_family <- tax_table(cichlid_omni)[, "Family"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Family <- taxa_family[rownames(otu_df)]
+
+# Calcular prevalencia por familia solo en omnívoros
+prevalence_table <- otu_df %>%
+  group_by(Family) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_omni))
+
+# Filtrar familias presentes en ≥ 80% de las muestras omnívoras
+core_family <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Family)
+
+# Filtrar datos originales para incluir solo core families y omnívoros
+dd_core <- dd %>%
+  filter(Family %in% core_family) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con las core families en omnívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Family)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_family)) +
+  labs(title = "Cichlids Core Families (≥80% samples) - Omnivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_family <- dd_core %>%
+  group_by(Family) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_family)
+```
+
+## Genus
+
+```{r}
+# Crear gráfico base con Genus
+p <- plot_bar(cichlid_omni, x = "Diet", fill = "Genus") 
+dd <- p$data
+
+# Ordenar géneros por abundancia media
+a <- dd %>% 
+  group_by(Genus, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Genus) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Genus <- factor(dd$Genus,
+                   levels = c("", setdiff(a$Genus, "")),
+                   labels = c("[none]", setdiff(a$Genus, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Control-Omni" ~ "Omnivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_genus <- length(unique(dd$Genus))
+
+# Crear tabla de presencia/ausencia por género y muestra
+presence_absence <- otu_table(cichlid_omni)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Genus
+taxa_genus <- tax_table(cichlid_omni)[, "Genus"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Genus <- taxa_genus[rownames(otu_df)]
+
+# Calcular prevalencia por género en omnívoros
+prevalence_table <- otu_df %>%
+  group_by(Genus) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_omni))
+
+# Filtrar géneros presentes en ≥ 80% de las muestras omnívoras
+core_genus <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Genus)
+
+# Filtrar datos originales para incluir solo core géneros y omnívoros
+dd_core <- dd %>%
+  filter(Genus %in% core_genus) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con los core géneros en omnívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_genus)) +
+  labs(title = "Cichlids Core Genera (≥80% samples) - Omnivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_genus <- dd_core %>%
+  group_by(Genus) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_genus)
+```
+
+## Species
+
+```{r}
+# Crear gráfico base con Species
+p <- plot_bar(cichlid_omni, x = "Diet", fill = "Species") 
+dd <- p$data
+
+# Ordenar especies por abundancia media
+a <- dd %>% 
+  group_by(Species, Diet) %>%
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Asegurar orden correcto en el gráfico
+dd$Species <- factor(dd$Species,
+                     levels = c("", setdiff(a$Species, "")),
+                     labels = c("[none]", setdiff(a$Species, "")))
+
+# Simplificar nombre de dieta
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Control-Omni" ~ "Omnivore"))
+
+# Paleta de colores
+tableau_palette <- c(
+  "#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78",
+  "#2ca02c", "#98df8a", "#d62728", "#ff9896",
+  "#9467bd", "#c5b0d5", "#8c564b", "#c49c94",
+  "#e377c2", "#f7b6d2", "#7f7f7f", "#c7c7c7",
+  "#bcbd22", "#dbdb8d", "#17becf", "#9edae5"
+)
+
+n_species <- length(unique(dd$Species))
+
+# Crear tabla de presencia/ausencia por especie y muestra
+presence_absence <- otu_table(cichlid_omni)
+presence_absence[presence_absence > 0] <- 1  # Convertir a presencia/ausencia
+
+# Obtener taxonomía a nivel de Species
+taxa_species <- tax_table(cichlid_omni)[, "Species"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Species <- taxa_species[rownames(otu_df)]
+
+# Calcular prevalencia por especie en omnívoros
+prevalence_table <- otu_df %>%
+  group_by(Species) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_omni))
+
+# Filtrar especies presentes en ≥ 80% de las muestras omnívoras
+core_species <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Species)
+
+# Filtrar datos originales para incluir solo core species y omnívoros
+dd_core <- dd %>%
+  filter(Species %in% core_species) %>%
+  filter(!is.na(Diet_new))
+
+# Gráfico de barras con las core species en omnívoros
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = rep(tableau_palette, length.out = n_species)) +
+  labs(title = "Cichlids Core Species (≥80% samples) - Omnivores", x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_species <- dd_core %>%
+  group_by(Species) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_species)
+```
+
+## CARNIVORES
+
+### Phyla
+
+```{r}
+### CARNIVORES
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_carnivores <- subset_samples(cichlid_intestine, Diet == "Marine")
+cichlid_carnivores <- prune_samples(sample_sums(cichlid_carnivores) > 0, cichlid_carnivores)
+
+# Eliminar OTUs con NA o "" en Phylum
+cichlid_carnivores <- subset_taxa(cichlid_carnivores, !is.na(Phylum) & Phylum != "")
+
+# Gráfico base para extraer datos
+p <- plot_bar(cichlid_carnivores, x = "Diet", fill = "Phylum") 
+dd <- p$data
+
+# Ordenar phyla por abundancia media
+a <- dd %>% 
+  group_by(Phylum, Diet) %>%  
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Phylum) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Ajustar orden de los phyla
+dd$Phylum <- factor(dd$Phylum,
+                    levels = c("", setdiff(a$Phylum, "")),
+                    labels = c("[none]", setdiff(a$Phylum, "")))
+
+# Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Marine" ~ "Carnivore"))
+
+# Paleta de colores fija para algunos phyla
+fixed_colors <- c(
+  Fusobacteriota     = "#aec7e8",
+  Proteobacteria     = "#1f77b4",
+  Firmicutes         = "#9edae5",
+  Bacteroidota       = "#dbdb8d",
+  Spirochaetota      = "#17becf",
+  Verrucomicrobiota  = "#ff9896",
+  Cyanobacteria      = "#2ca02c",
+  Bdellovibrionota   = "#9467bd",
+  Planctomycetota    = "#e377c2",
+  Actinobacteriota   = "#f7b6d2"
+)
+
+# Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_carnivores)
+presence_absence[presence_absence > 0] <- 1
+
+# Obtener taxonomía a nivel Phylum
+taxa_phylum <- tax_table(cichlid_carnivores)[, "Phylum"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Phylum <- taxa_phylum[rownames(otu_df)]
+
+# Filtrar valores vacíos o NA
+otu_df <- otu_df %>% filter(!is.na(Phylum) & Phylum != "")
+
+# Calcular prevalencia por phylum
+prevalence_table <- otu_df %>%
+  group_by(Phylum) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_carnivores))
+
+# Phyla presentes en ≥80% de las muestras
+core_phylum <- prevalence_table %>%
+  filter(prevalence_percent >= 0.80) %>%
+  pull(Phylum)
+
+# Filtrar datos originales
+dd_core <- dd %>%
+  filter(Phylum %in% core_phylum & !is.na(Diet_new) & Phylum != "")
+
+# Asignar colores a phyla no definidos en la paleta
+all_phyla <- unique(dd_core$Phylum)
+phyla_missing_colors <- setdiff(all_phyla, names(fixed_colors))
+
+# Generar colores aleatorios para los phyla faltantes
+set.seed(123)  # Reproducibilidad
+random_colors <- setNames(
+  grDevices::rainbow(length(phyla_missing_colors)),
+  phyla_missing_colors
+)
+
+# Combinar colores fijos y aleatorios
+combined_colors <- c(fixed_colors, random_colors)
+
+# Gráfico de barras
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Phylum)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = combined_colors) +
+  labs(title = "Cichlids Core Phyla (≥80% samples) - Carnivores",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_phyla <- dd_core %>%
+  group_by(Phylum) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_phyla)
+```
+
+### Class
+
+```{r}
+### CARNIVORES
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_carnivores <- subset_samples(cichlid_intestine, Diet == "Marine")
+cichlid_carnivores <- prune_samples(sample_sums(cichlid_carnivores) > 0, cichlid_carnivores)
+
+# Eliminar OTUs con NA o "" en Class
+cichlid_carnivores <- subset_taxa(cichlid_carnivores, !is.na(Class) & Class != "")
+
+# Gráfico base para extraer datos
+p <- plot_bar(cichlid_carnivores, x = "Diet", fill = "Class") 
+dd <- p$data
+
+# Ordenar clases por abundancia media
+a <- dd %>% 
+  group_by(Class, Diet) %>%  
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Class) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Ajustar orden de las clases
+dd$Class <- factor(dd$Class,
+                   levels = c("", setdiff(a$Class, "")),
+                   labels = c("[none]", setdiff(a$Class, "")))
+
+# Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Marine" ~ "Carnivore"))
+
+# Paleta de colores fija para algunas clases
+fixed_colors <- c(
+  Fusobacteriia       = "#aec7e8",
+  Gammaproteobacteria = "#1f77b4",
+  Clostridia          = "#9edae5",
+  Bacteroidia         = "#dbdb8d",
+  Spirochaetia        = "#17becf",
+  Verrucomicrobiae    = "#ff9896",
+  Cyanobacteriia      = "#2ca02c",
+  Bdellovibrionia     = "#9467bd",
+  Planctomycetes      = "#e377c2",
+  Actinobacteria      = "#f7b6d2"
+)
+
+# Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_carnivores)
+presence_absence[presence_absence > 0] <- 1
+
+# Obtener taxonomía a nivel Class
+taxa_class <- tax_table(cichlid_carnivores)[, "Class"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Class <- taxa_class[rownames(otu_df)]
+
+# Filtrar valores vacíos o NA
+otu_df <- otu_df %>% filter(!is.na(Class) & Class != "")
+
+# Calcular prevalencia por clase
+prevalence_table <- otu_df %>%
+  group_by(Class) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_carnivores))
+
+# Clases presentes en ≥80% de las muestras
+core_class <- prevalence_table %>%
+  filter(prevalence_percent >= 0.80) %>%
+  pull(Class)
+
+# Filtrar datos originales
+dd_core <- dd %>%
+  filter(Class %in% core_class & !is.na(Diet_new) & Class != "")
+
+# Asignar colores a clases no definidas
+all_classes <- unique(dd_core$Class)
+classes_missing_colors <- setdiff(all_classes, names(fixed_colors))
+
+# Generar colores aleatorios para clases faltantes
+set.seed(123)  # Reproducibilidad
+random_colors <- setNames(
+  grDevices::rainbow(length(classes_missing_colors)),
+  classes_missing_colors
+)
+
+# Combinar colores fijos y aleatorios
+combined_colors <- c(fixed_colors, random_colors)
+
+# Gráfico de barras
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Class)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = combined_colors) +
+  labs(title = "Cichlids Core Classes (≥80% samples) - Carnivores",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_class <- dd_core %>%
+  group_by(Class) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_class)
+```
+
+### Order
+
+```{r}
+### CARNIVORES
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_carnivores <- subset_samples(cichlid_intestine, Diet == "Marine")
+cichlid_carnivores <- prune_samples(sample_sums(cichlid_carnivores) > 0, cichlid_carnivores)
+
+# Eliminar OTUs con NA o "" en Order
+cichlid_carnivores <- subset_taxa(cichlid_carnivores, !is.na(Order) & Order != "")
+
+# Gráfico base para extraer datos
+p <- plot_bar(cichlid_carnivores, x = "Diet", fill = "Order") 
+dd <- p$data
+
+# Ordenar órdenes por abundancia media
+a <- dd %>% 
+  group_by(Order, Diet) %>%  
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Order) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Ajustar orden de los órdenes
+dd$Order <- factor(dd$Order,
+                   levels = c("", setdiff(a$Order, "")),
+                   labels = c("[none]", setdiff(a$Order, "")))
+
+# Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Marine" ~ "Carnivore"))
+
+# Paleta de colores fija para algunos órdenes
+fixed_colors <- c(
+  Fusobacteriales     = "#aec7e8",
+  Vibrionales         = "#1f77b4",
+  Clostridiales       = "#9edae5",
+  Bacteroidales       = "#dbdb8d",
+  Spirochaetales      = "#17becf",
+  Verrucomicrobiales  = "#ff9896",
+  Synechococcales     = "#2ca02c",
+  Bdellovibrionales   = "#9467bd",
+  Planctomycetales    = "#e377c2",
+  Actinomycetales     = "#f7b6d2"
+)
+
+# Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_carnivores)
+presence_absence[presence_absence > 0] <- 1
+
+# Obtener taxonomía a nivel Order
+taxa_order <- tax_table(cichlid_carnivores)[, "Order"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Order <- taxa_order[rownames(otu_df)]
+
+# Filtrar valores vacíos o NA
+otu_df <- otu_df %>% filter(!is.na(Order) & Order != "")
+
+# Calcular prevalencia por orden
+prevalence_table <- otu_df %>%
+  group_by(Order) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_carnivores))
+
+# Órdenes presentes en ≥80% de las muestras
+core_order <- prevalence_table %>%
+  filter(prevalence_percent >= 0.8) %>%
+  pull(Order)
+
+# Filtrar datos originales
+dd_core <- dd %>%
+  filter(Order %in% core_order & !is.na(Diet_new) & Order != "")
+
+# Asignar colores a órdenes no definidos en la paleta
+all_orders <- unique(dd_core$Order)
+orders_missing_colors <- setdiff(all_orders, names(fixed_colors))
+
+# Generar colores aleatorios para los órdenes faltantes
+set.seed(123)  # Reproducibilidad
+random_colors <- setNames(
+  grDevices::rainbow(length(orders_missing_colors)),
+  orders_missing_colors
+)
+
+# Combinar colores fijos y aleatorios
+combined_colors <- c(fixed_colors, random_colors)
+
+# Gráfico de barras
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Order)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = combined_colors) +
+  labs(title = "Cichlids Core Orders (≥80% samples) - Carnivores",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_order <- dd_core %>%
+  group_by(Order) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_order)
+```
+
+### Family
+
+```{r}
+### CARNIVORES
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_carnivores <- subset_samples(cichlid_intestine, Diet == "Marine")
+cichlid_carnivores <- prune_samples(sample_sums(cichlid_carnivores) > 0, cichlid_carnivores)
+
+# Eliminar OTUs con NA o "" en Family
+cichlid_carnivores <- subset_taxa(cichlid_carnivores, !is.na(Family) & Family != "")
+
+# Gráfico base para extraer datos
+p <- plot_bar(cichlid_carnivores, x = "Diet", fill = "Family") 
+dd <- p$data
+
+# Ordenar familias por abundancia media
+a <- dd %>% 
+  group_by(Family, Diet) %>%  
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Family) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Ajustar orden de las familias
+dd$Family <- factor(dd$Family,
+                   levels = c("", setdiff(a$Family, "")),
+                   labels = c("[none]", setdiff(a$Family, "")))
+
+# Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Marine" ~ "Carnivore"))
+
+# Paleta de colores fija para algunas familias (ejemplo)
+fixed_colors <- c(
+  Fusobacteriaceae     = "#aec7e8",
+  Vibrionaceae         = "#1f77b4",
+  Clostridiaceae       = "#9edae5",
+  Bacteroidaceae       = "#dbdb8d",
+  Spirochaetaceae      = "#17becf",
+  Verrucomicrobiaceae  = "#ff9896",
+  Synechococcaceae     = "#2ca02c",
+  Bdellovibrionaceae   = "#9467bd",
+  Planctomycetaceae    = "#e377c2",
+  Actinomycetaceae     = "#f7b6d2"
+)
+
+# Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_carnivores)
+presence_absence[presence_absence > 0] <- 1
+
+# Obtener taxonomía a nivel Family
+taxa_family <- tax_table(cichlid_carnivores)[, "Family"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Family <- taxa_family[rownames(otu_df)]
+
+# Filtrar valores vacíos o NA
+otu_df <- otu_df %>% filter(!is.na(Family) & Family != "")
+
+# Calcular prevalencia por familia
+prevalence_table <- otu_df %>%
+  group_by(Family) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_carnivores))
+
+# Familias presentes en ≥80% de las muestras
+core_family <- prevalence_table %>%
+  filter(prevalence_percent >= 0.80) %>%
+  pull(Family)
+
+# Filtrar datos originales
+dd_core <- dd %>%
+  filter(Family %in% core_family & !is.na(Diet_new) & Family != "")
+
+# Asignar colores a familias no definidos en la paleta
+all_families <- unique(dd_core$Family)
+families_missing_colors <- setdiff(all_families, names(fixed_colors))
+
+# Generar colores aleatorios para las familias faltantes
+set.seed(123)  # Reproducibilidad
+random_colors <- setNames(
+  grDevices::rainbow(length(families_missing_colors)),
+  families_missing_colors
+)
+
+# Combinar colores fijos y aleatorios
+combined_colors <- c(fixed_colors, random_colors)
+
+# Gráfico de barras
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Family)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = combined_colors) +
+  labs(title = "Cichlids Core Families (≥80% samples) - Carnivores",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_family <- dd_core %>%
+  group_by(Family) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_family)
+```
+
+### Genus
+
+```{r}
+### CARNIVORES
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_carnivores <- subset_samples(cichlid_intestine, Diet == "Marine")
+cichlid_carnivores <- prune_samples(sample_sums(cichlid_carnivores) > 0, cichlid_carnivores)
+
+# Eliminar OTUs con NA o "" en Genus
+cichlid_carnivores <- subset_taxa(cichlid_carnivores, !is.na(Genus) & Genus != "")
+
+# Gráfico base para extraer datos
+p <- plot_bar(cichlid_carnivores, x = "Diet", fill = "Genus") 
+dd <- p$data
+
+# Ordenar géneros por abundancia media
+a <- dd %>% 
+  group_by(Genus, Diet) %>%  
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Genus) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Ajustar orden de los géneros
+dd$Genus <- factor(dd$Genus,
+                   levels = c("", setdiff(a$Genus, "")),
+                   labels = c("[none]", setdiff(a$Genus, "")))
+
+# Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Marine" ~ "Carnivore"))
+
+# Paleta de colores fija para algunos géneros (ejemplo, puedes ajustar)
+fixed_colors <- c(
+  Fusobacterium     = "#aec7e8",
+  Vibrio           = "#1f77b4",
+  Clostridium       = "#9edae5",
+  Bacteroides       = "#dbdb8d",
+  Treponema         = "#17becf",
+  Akkermansia       = "#ff9896",
+  Synechococcus     = "#2ca02c",
+  Bdellovibrio      = "#9467bd",
+  Planctomyces      = "#e377c2",
+  Actinomyces       = "#f7b6d2"
+)
+
+# Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_carnivores)
+presence_absence[presence_absence > 0] <- 1
+
+# Obtener taxonomía a nivel Genus
+taxa_genus <- tax_table(cichlid_carnivores)[, "Genus"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Genus <- taxa_genus[rownames(otu_df)]
+
+# Filtrar valores vacíos o NA
+otu_df <- otu_df %>% filter(!is.na(Genus) & Genus != "")
+
+# Calcular prevalencia por género
+prevalence_table <- otu_df %>%
+  group_by(Genus) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_carnivores))
+
+# Géneros presentes en ≥80% de las muestras
+core_genus <- prevalence_table %>%
+  filter(prevalence_percent >= 0.80) %>%
+  pull(Genus)
+
+# Filtrar datos originales
+dd_core <- dd %>%
+  filter(Genus %in% core_genus & !is.na(Diet_new) & Genus != "")
+
+# Asignar colores a géneros no definidos en la paleta
+all_genera <- unique(dd_core$Genus)
+genera_missing_colors <- setdiff(all_genera, names(fixed_colors))
+
+# Generar colores aleatorios para los géneros faltantes
+set.seed(123)  # Reproducibilidad
+random_colors <- setNames(
+  grDevices::rainbow(length(genera_missing_colors)),
+  genera_missing_colors
+)
+
+# Combinar colores fijos y aleatorios
+combined_colors <- c(fixed_colors, random_colors)
+
+# Gráfico de barras
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Genus)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = combined_colors) +
+  labs(title = "Cichlids Core Genera (≥80% samples) - Carnivores",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_genus <- dd_core %>%
+  group_by(Genus) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_genus)
+```
+
+### Species
+
+```{r}
+### CARNIVORES
+
+# Subset de muestras intestinales
+cichlid_intestine <- subset_samples(cichlid_bact, Sample_type == "Intestine")
+cichlid_carnivores <- subset_samples(cichlid_intestine, Diet == "Marine")
+cichlid_carnivores <- prune_samples(sample_sums(cichlid_carnivores) > 0, cichlid_carnivores)
+
+# Eliminar OTUs con NA o "" en Species
+cichlid_carnivores <- subset_taxa(cichlid_carnivores, !is.na(Species) & Species != "")
+
+# Gráfico base para extraer datos
+p <- plot_bar(cichlid_carnivores, x = "Diet", fill = "Species") 
+dd <- p$data
+
+# Ordenar especies por abundancia media
+a <- dd %>% 
+  group_by(Species, Diet) %>%  
+  summarise(sum = sum(Abundance), .groups = "drop") %>%
+  group_by(Species) %>% 
+  summarise(mean_ab = mean(sum), .groups = "drop") %>% 
+  arrange(mean_ab)
+
+# Ajustar orden de las especies
+dd$Species <- factor(dd$Species,
+                   levels = c("", setdiff(a$Species, "")),
+                   labels = c("[none]", setdiff(a$Species, "")))
+
+# Asignar categorías de dieta simplificadas
+dd <- dd %>%
+  mutate(Diet_new = case_when(
+    Diet == "Marine" ~ "Carnivore"))
+
+# Paleta de colores fija para algunas especies (ejemplo, puedes ajustar)
+fixed_colors <- c(
+  "Fusobacterium sp."     = "#aec7e8",
+  "Vibrio sp."            = "#1f77b4",
+  "Clostridium sp."       = "#9edae5",
+  "Bacteroides sp."       = "#dbdb8d",
+  "Treponema sp."         = "#17becf",
+  "Akkermansia sp."       = "#ff9896",
+  "Synechococcus sp."     = "#2ca02c",
+  "Bdellovibrio sp."      = "#9467bd",
+  "Planctomyces sp."      = "#e377c2",
+  "Actinomyces sp."       = "#f7b6d2"
+)
+
+# Crear tabla de presencia/ausencia
+presence_absence <- otu_table(cichlid_carnivores)
+presence_absence[presence_absence > 0] <- 1
+
+# Obtener taxonomía a nivel Species
+taxa_species <- tax_table(cichlid_carnivores)[, "Species"]
+otu_df <- as.data.frame(as.matrix(presence_absence))
+otu_df$Species <- taxa_species[rownames(otu_df)]
+
+# Filtrar valores vacíos o NA
+otu_df <- otu_df %>% filter(!is.na(Species) & Species != "")
+
+# Calcular prevalencia por especie
+prevalence_table <- otu_df %>%
+  group_by(Species) %>%
+  reframe(prevalence = rowSums(across(where(is.numeric)))) %>%
+  mutate(prevalence_percent = prevalence / nsamples(cichlid_carnivores))
+
+# Especies presentes en ≥80% de las muestras
+core_species <- prevalence_table %>%
+  filter(prevalence_percent >= 0.80) %>%
+  pull(Species)
+
+# Filtrar datos originales
+dd_core <- dd %>%
+  filter(Species %in% core_species & !is.na(Diet_new) & Species != "")
+
+# Asignar colores a especies no definidos en la paleta
+all_species <- unique(dd_core$Species)
+species_missing_colors <- setdiff(all_species, names(fixed_colors))
+
+# Generar colores aleatorios para las especies faltantes
+set.seed(123)  # Reproducibilidad
+random_colors <- setNames(
+  grDevices::rainbow(length(species_missing_colors)),
+  species_missing_colors
+)
+
+# Combinar colores fijos y aleatorios
+combined_colors <- c(fixed_colors, random_colors)
+
+# Gráfico de barras
+ggplot(dd_core, aes(Diet_new, y = Abundance, fill = Species)) +
+  stat_summary(fun = sum, geom = "bar", position = "fill") +
+  scale_fill_manual(values = combined_colors) +
+  labs(title = "Cichlids Core Species (≥80% samples) - Carnivores",
+       x = "Diet", y = "Relative Abundance") +
+  theme_bw(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5))
+
+```
+
+```{r}
+abundancia_relativa_core_species <- dd_core %>%
+  group_by(Species) %>%
+  summarise(total_abundance = sum(Abundance)) %>%
+  mutate(proportion = total_abundance / sum(total_abundance) * 100) %>%
+  arrange(desc(proportion))
+
+print(abundancia_relativa_core_species)
+```
