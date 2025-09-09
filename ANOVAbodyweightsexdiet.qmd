@@ -1,0 +1,139 @@
+---
+title: "Boxplot BodyWeight and Diet + ANOVA"
+author: "Claudia Valdearenas Salvatierra"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+load("cichlids_rarefaction1500_SILVA.rda")
+```
+
+### Body weight and sex
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(phyloseq)
+library(rstatix)
+
+#Extract otutable (transpose it), and extract Metadata table. Transform both into a dataframe.
+otutable <- cichlid_rar %>% otu_table() %>% t() %>% data.frame()
+metadata <- cichlid_rar %>% sample_data() %>% data.frame()
+
+#Subset Intestine
+cichlid_int = subset_samples(cichlid_rar, Sample_type == "Intestine")
+cichlid_int
+metadata_int <- cichlid_int %>% sample_data() %>% data.frame()
+
+#Check both have the same number of rows
+common_samples <- rownames(metadata_int)
+otutable_int <- otutable[common_samples, ]
+
+ggplot(metadata_int, aes(x = Sex, y = Body_Weight_gr, color = Sex)) +
+  geom_boxplot() +
+  scale_color_manual(values = c("Female" = "pink", "Male" = "blue")) +
+  labs(x = "Sex", y = "Body weight (g)", color = "Sex") +
+  theme_minimal()
+
+aov_model <- aov(Body_Weight_gr ~ Sex, data = metadata_int)
+
+summary(aov_model)
+```
+
+### See if age (12 or 14 months) affects body weight
+
+```{r}
+# Filtrar datos por sexo
+metadata_female <- metadata_int %>% filter(Sex == "Female")
+metadata_female %>% 
+  count(Age)
+metadata_male   <- metadata_int %>% filter(Sex == "Male")
+metadata_male %>% 
+  count(Age)
+
+
+
+# Boxplot FEMALES
+ggplot(metadata_female, aes(x = Age, y = Body_Weight_gr, color = Age)) +
+  geom_boxplot() +
+  labs(
+    title = "Body weight by age (Females)",
+    x = "Age",
+    y = "Body weight (g)",
+    color = "Age"
+  ) +
+  scale_color_manual(values = c("12_months" = "lightblue", "14_months" = "darkblue")) +
+  theme_minimal()
+
+# Boxplot para machos
+ggplot(metadata_male, aes(x = Age, y = Body_Weight_gr, color = Age)) +
+  geom_boxplot() +
+  labs(
+    title = "Body weight by age (Males)",
+    x = "Age",
+    y = "Body weight (g)",
+    color = "Age"
+  ) +
+  scale_color_manual(values = c("12_months" = "lightblue", "14_months" = "darkblue")) +
+  theme_minimal()
+
+```
+
+### Body weight, sex and diet
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(phyloseq)
+library(forcats)
+
+# Extract otutable (transpose it), and extract Metadata table. Transform both into a dataframe.
+otutable <- cichlid_rar %>% otu_table() %>% t() %>% data.frame()
+metadata <- cichlid_rar %>% sample_data() %>% data.frame()
+
+# Subset Intestine
+cichlid_int <- subset_samples(cichlid_rar, Sample_type == "Intestine")
+metadata_int <- cichlid_int %>% sample_data() %>% data.frame()
+
+# Recode diet names
+metadata_int$Diet <- fct_recode(metadata_int$Diet,
+                                Herbivorous = "Algae",
+                                Omnivorous  = "Control-Omni",
+                                Carnivorous = "Marine")
+
+# Check both have the same number of rows
+common_samples <- rownames(metadata_int)
+otutable_int <- otutable[common_samples, ]
+
+# Plot
+ggplot(metadata_int, aes(x = Diet, y = Body_Weight_gr, color = Sex)) +
+  geom_boxplot() +
+  scale_color_manual(values = c("Female" = "pink", "Male" = "blue")) +
+  labs(x = "Diet", y = "Body weight (g)", color = "Sex")
+
+```
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(phyloseq)
+aov_model <- aov(Body_Weight_gr ~ Sex * Diet, data = metadata_int)
+summary(aov_model)
+```
+
+```{r}
+#Let's then test separately the effect of diet independently of sex:
+
+library(emmeans)
+
+aov_model <- aov(Body_Weight_gr ~ Sex * Diet, data = metadata_int)
+summary(aov_model)
+if (summary(aov_model)[[1]][["Pr(>F)"]][1] < 0.05) {
+  posthoc_result <- emmeans(aov_model, pairwise ~ Sex * Diet)
+  print(posthoc_result)
+}
+
+```
