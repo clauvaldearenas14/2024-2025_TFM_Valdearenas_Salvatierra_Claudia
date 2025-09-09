@@ -1,0 +1,232 @@
+---
+title: "Analysis of variables"
+author: "Claudia Valdearenas Salvatierra"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+# PERMANOVA analysis of variables
+
+```{r message=FALSE, warning=FALSE}
+#LOAD LIBRARIES
+library(vegan)
+library(phyloseq)
+library(dplyr)
+library(ggplot2)
+```
+
+## RAREFIED DATA (EUK+ BACT)
+
+```{r}
+#LOAD DATA
+load("cichlids_rarefaction1500_SILVA.rda")
+cichlid_rar = subset_samples(cichlid_rar, Sample_type == "Intestine")
+ntaxa(cichlid_rar)
+sum(taxa_sums(cichlid_rar))
+
+
+#Euk component
+cichlid_rar_euk =  subset_taxa(cichlid_rar, Domain == "Eukaryota")
+ntaxa(cichlid_rar_euk)
+sum(taxa_sums(cichlid_rar_euk))
+
+sample_data(cichlid_rar_euk)
+metadata <- as.data.frame(sample_data(cichlid_rar_euk))
+table(metadata$Diet)
+
+
+
+
+
+
+
+
+#Bact component
+cichlid_rar_bact =  subset_taxa(cichlid_rar, Domain == "Bacteria")
+ntaxa(cichlid_rar_bact)
+sum(taxa_sums(cichlid_rar_bact))
+
+```
+
+```{r}
+#Extract otutable (transpose it), and extract Metadata table. Transform both into a dataframe.
+otutable <- cichlid_rar %>% otu_table() %>% t() %>% data.frame()
+metadata <- cichlid_rar %>% sample_data() %>% data.frame()
+```
+
+```{r message=FALSE, warning=FALSE}
+### TEST ADONIS (PERMANOVA)
+?adonis2
+```
+
+### Test for "Diet" effect
+
+```{r}
+#Subset Intestine
+cichlid_int = subset_samples(cichlid_rar, Sample_type == "Intestine")
+cichlid_int
+metadata_int <- cichlid_int %>% sample_data() %>% data.frame()
+
+#Check both have the same number of rows
+common_samples <- rownames(metadata_int)
+otutable_int <- otutable[common_samples, ]
+
+#Test
+adonis2(sqrt(otutable_int) ~ Diet, 
+       data = metadata_int)
+```
+
+-   [DIET IS A SIGNIFICANT VARIABLE IN MICROBIOTA COMPOSITION]{style="color:green;"}
+
+### Test for "Sex" effect
+
+```{r}
+#Test
+adonis2(sqrt(otutable_int) ~ Sex, 
+       data = metadata_int)
+```
+
+-   [SEX IS NOT A SIGNIFICANT VARIABLE IN MICROBIOTA COMPOSITION]{style="color:red;"}
+
+### Test for Tank+Diet
+
+#### "BY MARGIN": **Type III SS** → efectos *marginales*
+
+```{r}
+colSums(is.na(metadata_int))
+metadata_int_clean <- metadata_int[complete.cases(metadata_int[, c("Diet", "Tank")]), ]
+common_samples <- intersect(rownames(metadata_int_clean), rownames(otutable_int))
+otutable_int_clean <- otutable_int[common_samples, ]
+metadata_int_clean <- metadata_int_clean[common_samples, ]
+
+adonis2(formula = sqrt(otutable_int_clean) ~ Diet + Diet:Tank, 
+        data = metadata_int_clean, permutations = 999, by = "margin")
+
+```
+
+#### "BY TERMS": **Type I SS** → efectos *secuenciales*
+
+```{r}
+adonis2(
+  formula = sqrt(otutable_int_clean) ~ Diet + Diet:Tank, 
+  data = metadata_int_clean, 
+  permutations = 999, 
+  by = "terms"
+)
+```
+
+#### PCoA
+
+```{r}
+ssv <- otutable_int_clean 
+env <- metadata_int_clean 
+```
+
+```{r}
+
+pcoa_raw <- cmdscale(vegdist(sqrt(ssv)), eig = TRUE)
+pcoa <- data.frame(pcoa_raw$points, env)
+names(pcoa)[1:2] <- paste0("PCoA", 1:2)
+
+summary(pcoa)
+
+
+#variance
+eig_vals <- pcoa_raw$eig
+var_expl <- round(100 * eig_vals[1:2] / sum(eig_vals), 1)
+
+#graph
+ggplot(pcoa, aes(x = PCoA1, y = PCoA2, color = Diet)) +
+  geom_point(size = 3, alpha = 0.8) +
+  scale_color_manual(
+    values = c("Algae" = "#1b9e77", "Control-Omni" = "#7570b3", "Marine" = "#d95f02"),
+    labels = c("Herbivore", "Omnivore", "Carnivore")
+  ) +
+  labs(
+    x = paste0("PCoA1 (", var_expl[1], "%)"),
+    y = paste0("PCoA2 (", var_expl[2], "%)"),
+    title = "PCoA (Bray-Curtis + sqrt)",
+    color = "Diet"  
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+# Asegúrate de que Tank sea un factor con 10 niveles únicos
+pcoa$Tank <- factor(pcoa$Tank)
+
+# Seleccionamos 10 formas legibles (puedes modificarlas si quieres otras)
+# Formas comunes y distinguibles: 0–25 (pero evita 20–25 que son menos visibles)
+tank_shapes <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+ggplot(pcoa, aes(x = PCoA1, y = PCoA2, color = Diet, shape = Tank)) +
+  geom_point(size = 3, alpha = 0.8) +
+  scale_color_manual(
+    values = c("Algae" = "#1b9e77", "Control-Omni" = "#7570b3", "Marine" = "#d95f02"),
+    labels = c("Herbivore", "Omnivore", "Carnivore")
+  ) +
+  scale_shape_manual(values = tank_shapes) +
+  labs(
+    x = paste0("PCoA1 (", var_expl[1], "%)"),
+    y = paste0("PCoA2 (", var_expl[2], "%)"),
+    title = "PCoA (Bray-Curtis + sqrt)",
+    color = "Diet",
+    shape = "Tank"
+  ) +
+  theme_minimal()
+
+```
+
+## NORMALIZED DATA (BACT)
+
+```{r}
+#LOAD DATA
+load("cichlids_SILVA_bacteria_may21_NORM.rda")
+```
+
+```{r}
+#Extract otutable (transpose it), and extract Metadata table. Transform both into a dataframe.
+otutable <- phyloseq_norm %>% otu_table() %>% t() %>% data.frame()
+metadata <- phyloseq_norm %>% sample_data() %>% data.frame()
+```
+
+```{r}
+#Subset Intestine
+cichlid_int = subset_samples(phyloseq_norm, Sample_type == "Intestine")
+cichlid_int
+metadata_int <- cichlid_int %>% sample_data() %>% data.frame()
+
+#Check both have the same number of rows
+common_samples <- rownames(metadata_int)
+otutable_int <- otutable[common_samples, ]
+
+
+# Eliminar muestras vacías del otutable
+otutable_int <- otutable_int[rowSums(otutable_int) > 0, ]
+
+# Filtrar el metadata para que coincida
+metadata_int <- metadata_int[rownames(otutable_int), ]
+
+```
+
+```{r}
+#Test
+adonis2(sqrt(otutable_int) ~ Diet, 
+       data = metadata_int)
+```
+
+-   [DIET IS A SIGNIFICANT VARIABLE IN MICROBIOTA COMPOSITION]{style="color:green;"}
+
+### Test for "Sex" effect
+
+```{r}
+#Test
+adonis2(sqrt(otutable_int) ~ Sex, 
+       data = metadata_int)
+```
+
+-   [SEX IS NOT A SIGNIFICANT VARIABLE IN MICROBIOTA COMPOSITION]{style="color:red;"}
