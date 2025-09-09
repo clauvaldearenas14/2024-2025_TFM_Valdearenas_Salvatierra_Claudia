@@ -1,0 +1,326 @@
+---
+title: "Enrichment(Bact)definitive"
+author: "Claudia Valdearenas Salvatierra"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+# Enrichment for Bacteria data
+
+```{r}
+#LOAD LIBRARIES
+library(ggplot2)
+theme_set(theme_bw())
+library(tidyverse)
+library(vegan)
+library(indicspecies)
+library(ggrepel)
+```
+
+## 1. Phylum level
+
+### 1.1 PCoA
+
+```{r}
+#LOAD DATA
+load("cichlids_rarefaction1500_SILVA.rda")
+cichlid<-cichlid_rar
+cichlid =  subset_taxa(cichlid, Domain == "Bacteria")
+ntaxa(cichlid)
+cichlid<-subset_samples(cichlid, Sample_type == "Intestine")
+table(sample_data(cichlid)$Sample_type)
+```
+
+```{r}
+ssv <- cichlid %>% otu_table() %>% t() %>% data.frame()
+env <- cichlid %>% sample_data() %>% data.frame()
+
+pcoa <- cmdscale(vegdist(sqrt(ssv)))
+pcoa <- data.frame(pcoa, env)
+names(pcoa)[1:2] <- paste0("PCoA", 1:2)
+
+
+#Change diet names to graph
+pcoa <- pcoa %>%
+  mutate(Diet = recode(Diet,
+                       "Algae" = "Herbivore",
+                       "Control-Omni" = "Control-Omnivorous",
+                       "Marine" = "Carnivore"))
+
+#Diet plot
+
+ggplot(pcoa, aes(PCoA1, PCoA2, col = Diet)) +
+  geom_point(shape = 21, size = 3, stroke = 1) +
+  stat_ellipse() +
+  coord_fixed() +
+  scale_color_manual(values = c("Herbivore" = "forestgreen",
+                                "Control-Omnivorous" = "blue",
+                                "Carnivore" = "red")) +
+  theme_bw()
+
+```
+
+```{r}
+##Variance explained by each axis
+
+dist_matrix <- vegdist(sqrt(ssv))
+pcoa_result <- cmdscale(dist_matrix, eig = TRUE)
+
+# Proporción de varianza explicada:
+variance_explained <- round(100 * pcoa_result$eig / sum(pcoa_result$eig), 1)
+
+# Luego en el gráfico:
+ggplot(pcoa, aes(PCoA1, PCoA2, color = Diet)) +
+  geom_point(size = 3) +
+  stat_ellipse() +
+  xlab(paste0("PCoA1 (", variance_explained[1], "%)")) +
+  ylab(paste0("PCoA2 (", variance_explained[2], "%)")) +
+  scale_color_manual(values = c("Herbivore" = "forestgreen",
+                                "Control-Omnivorous" = "blue",
+                                "Carnivore" = "red")) +
+  theme_bw()
+
+```
+
+```{r}
+##Correlation between variables
+
+dist_matrix <- vegdist(sqrt(ssv)) 
+pcoa_result <- cmdscale(dist_matrix, eig = TRUE, k = 2) 
+
+# Coordenates
+pcoa_coords <- as.data.frame(pcoa_result$points)
+
+# Make sure variables are factors
+
+str(env$Diet)
+str(env$Sex)
+
+env$Diet <- as.factor(env$Diet)
+env$Sex <- as.factor(env$Sex)
+
+# Select variables 
+env_subset <- env[, c("Diet", "Sex")] 
+
+
+# Remove rows with NA
+complete_cases <- complete.cases(env_subset)
+complete_cases
+pcoa_coords <- pcoa_coords[complete_cases, ]
+env_subset <- env_subset[complete_cases, ]
+
+# See correlations
+fit <- envfit(pcoa_coords, env_subset, permutations = 999)
+print(fit)
+```
+
+```{r}
+#Plot correlations
+
+# Extract coordenates (centroids)
+factors_coords <- as.data.frame(fit$factors$centroids)
+factors_coords$Variable <- rownames(factors_coords)
+colnames(factors_coords)[1:2] <- c("PCoA1", "PCoA2")
+
+
+pcoa_plot_df <- data.frame(pcoa_coords, env)
+pcoa_plot_df <- pcoa_plot_df %>%
+  mutate(Diet = recode(Diet,
+                       "Algae" = "Herbivore",
+                       "Control-Omni" = "Control-Omnivorous",
+                       "Marine" = "Carnivore"))
+
+
+ggplot(pcoa_plot_df, aes(V1, V2, color = Diet)) +
+  geom_point(size = 3) +
+  stat_ellipse() +
+  # Add centroids
+  geom_segment(data = factors_coords,
+               aes(x = 0, y = 0, xend = PCoA1, yend = PCoA2),
+               arrow = arrow(length = unit(0.2, "cm")),
+               inherit.aes = FALSE, color = "black") +
+  geom_text(data = factors_coords,
+            aes(x = PCoA1, y = PCoA2, label = Variable),
+            inherit.aes = FALSE,
+            color = "black", hjust = 0.5, vjust = -0.5, size = 4) +
+  xlab(paste0("PCoA1 (", round(100 * pcoa_result$eig[1] / sum(pcoa_result$eig), 1), "%)")) +
+  ylab(paste0("PCoA2 (", round(100 * pcoa_result$eig[2] / sum(pcoa_result$eig), 1), "%)")) +
+  scale_color_manual(values = c("Herbivore" = "forestgreen",
+                                "Control-Omnivorous" = "blue",
+                                "Carnivore" = "red")) +
+  theme_bw()
+
+```
+
+### Biplot
+
+```{r}
+tax <- cichlid %>%  tax_table() %>% data.frame()
+head(tax)
+# Convierte los rownames de tax en una columna llamada 'Taxa'
+tax <- tax %>%
+  tibble::rownames_to_column(var = "Taxa")
+
+```
+
+```{r}
+# Calcular correlaciones entre cada taxa y los ejes PCoA
+cors1 <- apply(sqrt(ssv), 2, function(x) cor(x, pcoa$PCoA1))
+cors2 <- apply(sqrt(ssv), 2, function(x) cor(x, pcoa$PCoA2))
+
+cor_df <- data.frame(
+  Taxa = colnames(sqrt(ssv)),
+  PCoA1 = cors1,
+  PCoA2 = cors2
+)
+
+scaling_factor <- 3
+
+cor_df %>% filter(is.na(PCoA1) | is.na(PCoA2))
+
+# Add Family column
+cor_df <- cor_df %>%
+  left_join(tax %>% select(Taxa, Family), by = "Taxa") %>%
+  mutate(Family = ifelse(is.na(Family) | Family == "" , "Unclassified", Family))
+
+
+cor_df <- cor_df %>%
+  filter(!is.na(PCoA1), !is.na(PCoA2))
+
+
+ggplot(pcoa, aes(PCoA1, PCoA2, color = Diet)) +
+  geom_point(size = 3) +
+  stat_ellipse() +
+  geom_segment(data = cor_df,
+               aes(x = 0, y = 0, xend = PCoA1 * scaling_factor, yend = PCoA2 * scaling_factor),
+               inherit.aes = FALSE,
+               arrow = arrow(length = unit(0.2, "cm")),
+               color = "purple") +
+  geom_text_repel(data = cor_df,
+                  aes(x = PCoA1 * scaling_factor, y = PCoA2 * scaling_factor, label = Family),
+                  inherit.aes = FALSE,
+                  size = 3) +
+  scale_color_manual(values = c("Herbivore" = "forestgreen",
+                                "Control-Omnivorous" = "blue",
+                                "Carnivore" = "red")) +
+  coord_fixed() +
+  theme_bw() +
+  labs(title = "PCoA Biplot taxa vectors",
+       x = paste0("PCoA1 (", variance_explained[1], "%)"),
+       y = paste0("PCoA2 (", variance_explained[2], "%)"))
+
+
+###Filter of the 30 most correlated taxa to visualize better
+
+cor_df_clean <- cor_df %>%
+  filter(!is.na(PCoA1), !is.na(PCoA2)) %>%          
+  mutate(abs_cor = pmax(abs(PCoA1), abs(PCoA2))) %>%
+  arrange(desc(abs_cor)) %>%                        
+  slice(1:30)                                      
+
+
+ggplot(pcoa, aes(PCoA1, PCoA2, color = Diet)) +
+  geom_point(size = 3) +
+  stat_ellipse() +
+  geom_segment(data = cor_df_clean,
+               aes(x = 0, y = 0, xend = PCoA1 * scaling_factor, yend = PCoA2 * scaling_factor),
+               inherit.aes = FALSE,
+               arrow = arrow(length = unit(0.2, "cm")),
+               color = "purple") +
+  geom_text_repel(data = cor_df,
+                  aes(x = PCoA1 * scaling_factor, y = PCoA2 * scaling_factor, label = Family),
+                  inherit.aes = FALSE,
+                  size = 3) +
+  scale_color_manual(values = c("Herbivore" = "forestgreen",
+                                "Control-Omnivorous" = "blue",
+                                "Carnivore" = "red")) +
+  coord_fixed() +
+  theme_bw() +
+  labs(title = "PCoA Biplot taxa vectors",
+       x = paste0("PCoA1 (", variance_explained[1], "%)"),
+       y = paste0("PCoA2 (", variance_explained[2], "%)"))
+
+```
+
+### 1.2 PERMANOVA
+
+```{r}
+adonis2(sqrt(ssv) ~ Diet, env)
+
+adonis2(sqrt(ssv) ~ Sex, env)
+
+adonis2(sqrt(ssv) ~ Diet*Sex, env, by = "terms")
+```
+
+```{r}
+#Let's then test separately the effect of diet independently of sex:
+
+adonis2(sqrt(ssv[env$Sex == "Male", ]) ~ Diet,
+         data = env[env$Sex == "Male", ])
+
+adonis2(sqrt(ssv[env$Sex == "Female", ]) ~ Diet,
+        data = env[env$Sex == "Female", ])
+
+
+####Effect of each type of diet in each type of sex
+# Efecto de Sexo en la dieta "Algae"
+adonis2(sqrt(ssv[env$Diet == "Algae", ]) ~ Sex,
+        data = env[env$Diet == "Algae", ])
+
+# Efecto de Sexo en la dieta "Marine"
+adonis2(sqrt(ssv[env$Diet == "Marine", ]) ~ Sex,
+        data = env[env$Diet == "Marine", ])
+
+# Efecto de Sexo en la dieta "Control-Omni"
+adonis2(sqrt(ssv[env$Diet == "Control-Omni", ]) ~ Sex,
+        data = env[env$Diet == "Control-Omni", ])
+```
+
+## Indicator spcecies
+
+```{r}
+#LOAD AGGREGATED DATA
+  ##Phylum
+
+load("cichlid_rar_bact.phylum.rda")
+cichlid<-cichlid_rar_bact.ph
+sample_data(cichlid)
+cichlid_int<-subset_samples(cichlid, Sample_type == "Intestine")
+tax_table(cichlid_int)
+
+
+  ##Family
+
+load("cichlid_rar_bact_family.rda")
+cichlid<-cichlid_rar_bact.family
+sample_data(cichlid)
+cichlid_int<-subset_samples(cichlid, Sample_type == "Intestine")
+tax_table(cichlid_int)
+
+
+  ##Genus
+
+load("cichlid_rar_bact_genus.rda")
+cichlid<-cichlid_rar_bact.genus
+sample_data(cichlid)
+cichlid_int<-subset_samples(cichlid, Sample_type == "Intestine")
+tax_table(cichlid_int)
+
+```
+
+```{r}
+ssv <- cichlid_int %>% otu_table() %>% t() %>% data.frame()
+env <- cichlid_int %>% sample_data() %>% data.frame()
+
+```
+
+```{r}
+iv <- multipatt(ssv, cluster = env$Diet, control = how(nperm = 999))
+
+summary(iv, indvalcomp = TRUE, alpha = 0.001)
+
+```
+
+### Represent this indicator OTUs
