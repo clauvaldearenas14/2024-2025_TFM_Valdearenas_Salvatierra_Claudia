@@ -1,0 +1,460 @@
+---
+title: "Beta diversity"
+author: "Claudia Valdearenas"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+## Beta diversity
+
+```{r message=FALSE, warning=FALSE}
+#LOAD LIBRARIES
+library(vegan)
+library(ape)
+library(phyloseq)
+library(ggplot2)
+theme_set(theme_bw())
+library(patchwork)
+library(tidyverse)
+```
+
+```{r}
+#LOAD DATA
+load("cichlids_SILVA_bacteria_may21_NORM.rda")
+cichlids<-phyloseq_norm
+ntaxa(cichlids)
+cichlids<-subset_samples(cichlids, Sample_type == "Intestine")
+```
+
+```{r}
+#### DATA EXPLORATION ####
+#Check distribution of variables (number of individuals per variable)
+
+#Extract Bacteria table (ssv) and Metadata table (env)
+ssv <- cichlids %>% otu_table() %>% t() %>% data.frame()
+ssv <- ssv[rowSums(ssv) > 0, ]
+env <- cichlids %>% sample_data() %>% data.frame()
+env <- env[rownames(ssv), ]
+```
+
+```{r}
+#Create an object of each of the phyloseq tables
+metadata <- sample_data(cichlids)
+otutable <-otu_table(cichlids)
+#transpose the otutable
+otutable<-t(otutable)
+```
+
+```{r message=FALSE, warning=FALSE}
+#### BETA DIVERSITY WITH multidimensional scaling (MDS)####
+
+#check the metrics
+?vegdist
+```
+
+```{r}
+#create a distance matrix based on a selected metric
+
+otutable <- as.data.frame(otutable)
+otutable <- otutable[rowSums(otutable) > 0, ]
+
+# Dejar solo las muestras que siguen en otutable
+metadata <- metadata[rownames(otutable), ]
+
+dist<-vegdist((sqrt(otutable)), "bray") 
+
+#Do a multidimensional scaling analysis
+pcoa <- cmdscale(dist, eig=T, k=2)
+pcoa
+pcoa <- data.frame(pcoa$points, metadata)
+names(pcoa)[1:2] <- paste0("PCoA", 1:2) #choose principal components to show
+
+# get centroids for Diet
+pcoa <- pcoa %>%
+  group_by(Diet) %>%
+  mutate(
+    cPCoA1 = mean(PCoA1),
+    cPCoA2 = mean(PCoA2)
+  ) %>%
+  ungroup()
+
+
+# Plot by Diet
+
+pcoa <- pcoa %>%
+  mutate(Diet = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Omnivorous",
+    Diet == "Marine" ~ "Carnivorous",
+    TRUE ~ Diet))
+
+ggplot(pcoa, aes(PCoA1, PCoA2, col = Diet)) +
+  geom_point() +
+  geom_label(aes(cPCoA1, cPCoA2, label = Diet),
+             size = 2,
+             show.legend = FALSE) +
+  stat_ellipse() +
+  coord_fixed() + 
+  scale_color_manual(values = c("Herbivorous" = "forestgreen",
+                                "Omnivorous" = "blue",
+                                "Carnivorous" = "red")) +
+  theme_bw()
+
+## % variance explained by each axis
+
+# PCoA con eigenvalues
+pcoa_res <- cmdscale(dist, eig = TRUE, k = 2)
+
+# % de varianza explicada
+eig_vals <- pcoa_res$eig
+var_exp <- eig_vals / sum(eig_vals[eig_vals > 0]) * 100
+
+# Extraer coordenadas + metadata
+pcoa <- data.frame(pcoa_res$points, metadata)
+names(pcoa)[1:2] <- c("PCoA1", "PCoA2")
+
+# Guardar % de los dos primeros ejes
+pc1_var <- round(var_exp[1], 2)
+pc2_var <- round(var_exp[2], 2)
+
+
+# Calcular centroides por Diet
+pcoa <- pcoa %>%
+  group_by(Diet) %>%
+  mutate(
+    cPCoA1 = mean(PCoA1),
+    cPCoA2 = mean(PCoA2)
+  ) %>%
+  ungroup()
+
+
+# Ajustar nombres de Diet
+pcoa <- pcoa %>%
+  mutate(Diet = case_when(
+    Diet == "Algae" ~ "Herbivorous",
+    Diet == "Control-Omni" ~ "Control-Omni",
+    Diet == "Marine" ~ "Carnivorous",
+    TRUE ~ Diet
+  ))
+
+# Plot final
+ggplot(pcoa, aes(PCoA1, PCoA2, col = Diet)) +
+  geom_point() +
+  geom_label(aes(cPCoA1, cPCoA2, label = Diet),
+             size = 2,
+             show.legend = FALSE) +
+  stat_ellipse() +
+  coord_fixed() +
+  scale_color_manual(values = c("Herbivorous" = "forestgreen",
+                                "Control-Omni" = "blue",
+                                "Carnivorous" = "red")) +
+  labs(x = paste0("PCoA1 (", pc1_var, "%)"),
+       y = paste0("PCoA2 (", pc2_var, "%)")) +
+  theme_bw()
+
+
+
+
+# Plot by Diet + Sex
+ggplot(pcoa, aes(PCoA1, PCoA2, col = Diet)) +
+  geom_point() +
+  geom_label(aes(cPCoA1, cPCoA2, label = Diet),
+             size = 2,
+             show.legend = FALSE) +
+  stat_ellipse() +
+  coord_fixed()+
+  facet_wrap("Sex") +
+  scale_color_manual(values = c("Herbivorous" = "forestgreen",
+                                "Control-Omnivorous" = "blue",
+                                "Carnivorous" = "red")) +
+  theme_bw()
+
+
+# Plot by Diet + Tank
+
+levels(factor(pcoa$Tank))
+tanks_ordered <- c("S12", "S9", "S11", "S6", "S8", "S10", "S13", "S3", "S5", "S7")
+
+pcoa$Tank <- factor(pcoa$Tank, levels = tanks_ordered)
+
+
+ggplot(pcoa, aes(PCoA1, PCoA2, col = Diet)) +
+  geom_point() +
+  geom_label(aes(cPCoA1, cPCoA2, label = Diet),
+             size = 2,
+             show.legend = FALSE) +
+  stat_ellipse() +
+  coord_fixed()+
+  facet_wrap("Tank") +
+  scale_color_manual(values = c("Herbivorous" = "forestgreen",
+                                "Control-Omni" = "blue",
+                                "Carnivorous" = "red")) +
+  theme_bw()
+
+#facet_wrap allows to create multiple plots based on the selected variable
+
+```
+
+```{r}
+
+# Estadísticas descriptivas por Diet
+pcoa_stats <- pcoa %>%
+  group_by(Diet) %>%
+  summarise(
+    n = n(),
+    mean_PCoA1 = mean(PCoA1, na.rm = TRUE),
+    sd_PCoA1 = sd(PCoA1, na.rm = TRUE),
+    median_PCoA1 = median(PCoA1, na.rm = TRUE),
+    min_PCoA1 = min(PCoA1, na.rm = TRUE),
+    max_PCoA1 = max(PCoA1, na.rm = TRUE),
+    mean_PCoA2 = mean(PCoA2, na.rm = TRUE),
+    sd_PCoA2 = sd(PCoA2, na.rm = TRUE),
+    median_PCoA2 = median(PCoA2, na.rm = TRUE),
+    min_PCoA2 = min(PCoA2, na.rm = TRUE),
+    max_PCoA2 = max(PCoA2, na.rm = TRUE)
+  )
+
+pcoa_stats
+
+```
+
+```{r}
+#PERMANOVA
+metadata <- metadata[rownames(otutable), ]
+metadata <- data.frame(metadata)
+set.seed(123) # para reproducibilidad
+permanova <- adonis2(dist ~ Diet, data = metadata, permutations = 999)
+print(permanova)
+```
+
+### Ver la diferencia de varianzas entre los grupos de dieta
+
+```{r}
+# Convertir Diet a factor por si acaso
+group <- as.factor(metadata$Diet)
+
+# Test de dispersión (homogeneidad de varianza)
+disp <- betadisper(dist, group)
+anova(disp)  # Test formal de diferencia de varianzas
+```
+
+-   Varianzas diferentes entre grupos
+
+```{r}
+disp <- betadisper(dist, group)
+permut_posthoc <- permutest(disp, pairwise = TRUE, permutations = 999)
+permut_posthoc
+
+
+# 1️⃣ Extraer distancias de cada muestra a su centroide (ya calculadas por betadisper)
+dist_to_centroid <- disp$distances
+
+# 2️⃣ Crear un data.frame para organizar las distancias y grupos
+df <- data.frame(dist_to_centroid = dist_to_centroid,
+                 Diet = group)
+
+# 3️⃣ Test de permutación sobre las ubicaciones de los centroides
+set.seed(123)
+nperm <- 999
+observed_F <- anova(disp)$`F`[1]  # F-value del test global de betadisper
+
+# Generar permutaciones
+perm_F <- numeric(nperm)
+for(i in 1:nperm){
+  perm_group <- sample(df$Diet)            # permutar etiquetas de grupo
+  perm_disp <- betadisper(dist, perm_group)
+  perm_F[i] <- anova(perm_disp)$`F`[1]
+}
+
+# 4️⃣ Calcular p-valor permutacional
+p_value <- mean(perm_F >= observed_F)
+p_value
+
+# Número de permutaciones
+nperm <- 999
+set.seed(123)
+
+# Obtener los niveles de los grupos
+grupos <- levels(group)
+
+# Crear matriz para guardar p-valores por pares
+p_matrix <- matrix(NA, nrow=length(grupos), ncol=length(grupos),
+                   dimnames=list(grupos, grupos))
+
+# Loop sobre todos los pares
+for(i in 1:(length(grupos)-1)){
+  for(j in (i+1):length(grupos)){
+    # Subconjunto de la distancia y grupos
+    idx <- group %in% c(grupos[i], grupos[j])
+    dist_sub <- as.dist(as.matrix(dist)[idx, idx])
+    group_sub <- droplevels(group[idx])
+    
+    # Betadisper para este par
+    disp_sub <- betadisper(dist_sub, group_sub)
+    observed_F <- anova(disp_sub)$F[1]
+    
+    # Permutaciones
+    perm_F <- numeric(nperm)
+    for(k in 1:nperm){
+      perm_group <- sample(group_sub)
+      perm_disp <- betadisper(dist_sub, perm_group)
+      perm_F[k] <- anova(perm_disp)$F[1]
+    }
+    
+    # Calcular p-valor
+    p_matrix[i,j] <- mean(perm_F >= observed_F)
+    p_matrix[j,i] <- p_matrix[i,j]  # simétrica
+  }
+}
+
+# Mostrar p-valores por pares
+p_matrix
+
+
+
+```
+
+```{r}
+
+library(dplyr)
+library(ggplot2)
+library(vegan)
+
+# 1. Renombrar niveles de 'Diet'
+metadata <- metadata %>%
+  mutate(Diet = case_when(
+    Diet == "Algae" ~ "Herbivore",
+    Diet == "Control-Omni" ~ "Control-Omnivorous",
+    Diet == "Marine" ~ "Carnivore",
+    TRUE ~ Diet
+  ))
+
+# 2. Convertir Diet a factor
+group <- as.factor(metadata$Diet)
+
+# 3. Test de dispersión
+disp <- betadisper(dist, group)
+anova(disp)
+
+# 4. Extraer datos para ggplot
+disp_df <- data.frame(DistanceToCentroid = disp$distances,
+                      Diet = group)
+
+# 5. Reordenar niveles del factor Diet para controlar el orden en el gráfico
+disp_df$Diet <- factor(disp_df$Diet, levels = c("Herbivore", "Control-Omnivorous", "Carnivore"))
+
+# 6. ggplot con colores personalizados y orden controlado
+ggplot(disp_df, aes(x = Diet, y = DistanceToCentroid, color = Diet)) +
+  geom_boxplot() +
+  scale_color_manual(values = c(
+    "Herbivore" = "forestgreen",
+    "Control-Omnivorous" = "blue",
+    "Carnivore" = "red"
+  )) +
+  labs(title = "Homogeneity of variances per diet",
+       y = "Distance to centroid") +
+  theme_minimal()
+
+```
+
+```{r}
+# 1. Asegurar que metadata es un data.frame
+metadata <- data.frame(metadata)
+
+# 2. Asegurar que las filas coinciden
+metadata <- metadata[rownames(otutable), ]
+
+# 3. Renombrar niveles de 'Diet'
+metadata$Diet <- case_when(
+  metadata$Diet == "Algae" ~ "Herbivore",
+  metadata$Diet == "Control-Omni" ~ "Control-Omnivorous",
+  metadata$Diet == "Marine" ~ "Carnivore",
+  TRUE ~ as.character(metadata$Diet)
+)
+
+# 4. Ejecutar capscale con Bray-Curtis
+cap <- capscale(sqrt(otutable) ~ Diet, data = metadata, distance = "bray")
+
+# 5. ANOVA del modelo
+anova(cap, permutations = 999)
+
+# 6. Crear vector de colores personalizados
+diet_colors <- c(
+  "Herbivore" = "forestgreen",
+  "Control-Omnivorous" = "blue",
+  "Carnivore" = "red"
+)
+
+# 7. Visualizar
+plot(cap, display = "sites", type = "n")
+
+# Obtener colores según las dietas renombradas
+group_colors <- diet_colors[metadata$Diet]
+
+points(cap, display = "sites", col = group_colors, pch = 19)
+
+legend("topright", legend = names(diet_colors),
+       col = diet_colors, pch = 19)
+
+```
+
+```{r}
+
+# 1. Renombrar niveles de Diet en metadata
+metadata$Diet <- case_when(
+  metadata$Diet == "Algae" ~ "Herbivore",
+  metadata$Diet == "Control-Omni" ~ "Control-Omnivorous",
+  metadata$Diet == "Marine" ~ "Carnivore",
+  TRUE ~ as.character(metadata$Diet)
+)
+
+# 2. Crear vector con colores (si luego quieres visualizar)
+diet_colors <- c(
+  "Herbivore" = "forestgreen",
+  "Control-Omnivorous" = "blue",
+  "Carnivore" = "red"
+)
+
+# 3. Crear función ANOSIM por pares (no cambia)
+pairwise_anosim <- function(dist_matrix, groups) {
+  groups <- as.factor(groups)
+  comb <- combn(levels(groups), 2)
+  results <- data.frame(
+    Group1 = character(),
+    Group2 = character(),
+    R = numeric(),
+    p.value = numeric()
+  )
+  
+  for(i in 1:ncol(comb)) {
+    grp1 <- comb[1, i]
+    grp2 <- comb[2, i]
+    
+    idx <- which(groups %in% c(grp1, grp2))
+    dist_sub <- as.matrix(dist_matrix)[idx, idx]
+    groups_sub <- droplevels(groups[idx])
+    
+    a <- anosim(as.dist(dist_sub), groups_sub, permutations = 999)
+    
+    results <- rbind(results, data.frame(
+      Group1 = grp1,
+      Group2 = grp2,
+      R = a$statistic,
+      p.value = a$signif
+    ))
+  }
+  
+  results$p.adj <- p.adjust(results$p.value, method = "fdr")
+  return(results)
+}
+
+# 4. Ejecutar el análisis con los nombres actualizados
+group <- metadata$Diet
+dist <- vegdist(sqrt(otutable), method = "bray")
+
+anosim_results <- pairwise_anosim(dist, group)
+print(anosim_results)
+
+```
