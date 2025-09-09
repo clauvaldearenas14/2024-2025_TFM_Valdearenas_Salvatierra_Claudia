@@ -1,0 +1,211 @@
+---
+title: "Tank variable and body weight"
+format: 
+  html:
+    embed-resources: true
+editor: visual
+---
+
+## PERMANOVA
+
+### Model amb sexe
+
+```         
+PERMANOVA
+Permutational MANOVA
+
+Resemblance worksheet
+Name: Resem1
+Data type: Similarity
+Selection: All
+Transform: Square root
+Resemblance: S17 Bray-Curtis similarity
+
+Sums of squares type: Type III (partial)
+Fixed effects sum to zero for mixed terms
+Permutation method: Permutation of residuals under a reduced model
+Number of permutations: 999
+
+Factors
+Name    Abbrev. Type    Levels
+Diet    Di  Fixed        3
+Sex Se  Fixed        2
+Tank    Ta  Random      10
+
+Excluded terms
+SexxTank(Diet)
+
+PERMANOVA table of results
+                                                Unique
+Source   df         SS      MS  Pseudo-F    P(perm)  perms
+Di       2       15763  7881,4    3,8815      0,009    999
+Se       1      1526,6  1526,6    1,1416      0,293    999
+Ta(Di)   7       14050  2007,1    1,5009      0,013    998
+DixSe      2        5237,7  2618,8    1,9584      0,019    999
+Res     63       84247  1337,3                            
+Total     75    1,3417E+05                                    
+
+Details of the expected mean squares (EMS) for the model
+Source  EMS
+Di  1*V(Res) + 6,153*V(Ta(Di)) + 16,247*S(Di)
+Se  1*V(Res) + 21,173*S(Se)
+Ta(Di)  1*V(Res) + 6,0675*V(Ta(Di))
+DixSe   1*V(Res) + 8,4478*S(DixSe)
+Res 1*V(Res)
+
+Construction of Pseudo-F ratio(s) from mean squares
+Source  Numerator       Denominator Num.df  Den.df
+Di  0,014088*Res + 1*Di 1,0141*Ta(Di)   2,01         7
+Se  1*Se            1*Res           1       63
+Ta(Di)  1*Ta(Di)        1*Res           7       63
+DixSe   1*DixSe         1*Res           2       63
+
+Estimates of components of variation
+Source      Estimate    Sq.root
+S(Di)       360,98      19
+S(Se)       8,942       2,9903
+V(Ta(Di))   110,4       10,507
+S(DixSe)    151,7       12,317
+V(Res)      1337,3      36,569
+```
+
+### Model sense sexe
+
+```         
+PERMANOVA
+Permutational MANOVA
+
+Resemblance worksheet
+Name: Resem1
+Data type: Similarity
+Selection: All
+Transform: Square root
+Resemblance: S17 Bray-Curtis similarity
+
+Sums of squares type: Type III (partial)
+Fixed effects sum to zero for mixed terms
+Permutation method: Permutation of residuals under a reduced model
+Number of permutations: 999
+
+Factors
+Name    Abbrev. Type    Levels
+Diet    Di  Fixed        3
+Sex Se  Fixed        2
+Tank    Ta  Random      10
+
+Excluded terms
+Sex
+DietxSex
+SexxTank(Diet)
+
+PERMANOVA table of results
+                                                Unique
+Source  df          SS      MS  Pseudo-F    P(perm)  perms
+Di       2       22470   11235    4,2727      0,016    998
+Ta(Di)   7       17465    2495    1,8081      0,003    997
+Res     66       91073  1379,9                            
+Total   75  1,3417E+05                                    
+
+Details of the expected mean squares (EMS) for the model
+Source  EMS
+Di  1*V(Res) + 7,0987*V(Ta(Di)) + 19,25*S(Di)
+Ta(Di)  1*V(Res) + 6,6849*V(Ta(Di))
+Res 1*V(Res)
+
+Construction of Pseudo-F ratio(s) from mean squares
+Source  Numerator   Denominator Num.df  Den.df
+Di  0,061895*Res + 1*Di 1,0619*Ta(Di)    2,03        7
+Ta(Di)  1*Ta(Di)        1*Res            7      66
+
+Estimates of components of variation
+Source      Estimate    Sq.root
+S(Di)       450,44      21,224
+V(Ta(Di))   166,8       12,915
+V(Res)      1379,9      37,147
+```
+
+## Pes
+
+```{r}
+#| warning: false
+#| message: false
+
+load("../Objectes phyloseq/cichlids_rarefaction1500_SILVA.rda")
+
+library(tidyverse)
+library(phyloseq)
+
+#Extract otutable (transpose it), and extract Metadata table. Transform both into a dataframe.
+otutable <- cichlid_rar %>% otu_table() %>% t() %>% data.frame()
+metadata <- cichlid_rar %>% sample_data() %>% data.frame()
+
+#Subset Intestine
+cichlid_int = subset_samples(cichlid_rar, Sample_type == "Intestine")
+metadata_int <- cichlid_int %>% sample_data() %>% data.frame()
+
+#Check both have the same number of rows
+common_samples <- rownames(metadata_int)
+otutable_int <- otutable[common_samples, ]
+
+ggplot(metadata_int, aes(x = Diet, y = Body_Weight_gr, color = Sex)) +
+  geom_boxplot() +
+  scale_color_manual(values = c("Female" = "pink", "Male" = "blue")) +
+  labs(x = "Sex", y = "Body weight (g)", color = "Sex") +
+  theme_minimal()
+```
+
+Hi ha heterocedasticitat. Una solució simple és transformar la resposta:
+
+Si transformem la resposta amb logaritme, evitem el problema
+
+```{r}
+ggplot(metadata_int, aes(x = Diet, y = Body_Weight_gr, color = Sex)) +
+  geom_boxplot() +
+  scale_color_manual(values = c("Female" = "pink", "Male" = "blue")) +
+  labs(x = "Sex", y = "Body weight (g)", color = "Sex") +
+  theme_minimal() +
+  scale_y_log10()
+
+aov_model <- aov(log(Body_Weight_gr) ~ Sex * Diet, data = metadata_int)
+
+car::leveneTest(aov_model)
+```
+
+Com que el disseny no és balancejat:
+
+```{r}
+xtabs(~ Sex + Diet, metadata_int)
+```
+
+la taula d'ANOVA que R fa per defecte no és la millor, perquè son tests seqüencials (Type I SS). Com que la interacció no és significativa:
+
+```{r}
+anova(aov_model)
+```
+
+podem refer el model sense interacció i demanar sumes de quadrats de tipus II (marginals):
+
+```{r}
+m <- update(aov_model, ~ . - Sex:Diet)
+car::Anova(m, type = "II")
+```
+
+Ara podem fer un test per post-hoc per parelles per a Diet:
+
+```{r}
+emmeans::emmeans(m, pairwise ~ Diet)
+```
+
+El residus del model es desvien una mica de la normalitat, però no és greu:
+
+```{r}
+car::qqPlot(m)
+```
+
+El model que hem ajustat, transformat a l'escala original, és:
+
+```{r}
+library(ggeffects)
+
+plot(predict_response(m, terms = c("Diet", "Sex")), show_data = TRUE)
+```
